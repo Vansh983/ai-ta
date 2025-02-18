@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import DocumentUpload from "@/components/DocumentUpload";
-import { createCourse, getUserCourses } from "@/lib/firebase/firebase.utils";
+import { createCourse, getUserCourses, uploadDocument } from "@/lib/firebase/firebase.utils";
 import type { Document } from "@/lib/firebase/firebase.utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -21,6 +21,11 @@ interface Course {
     userId: string;
 }
 
+interface PendingDocument {
+    file: File;
+    name: string;
+}
+
 export default function InstructorDashboard() {
     const { user } = useAuth();
     const [courses, setCourses] = useState<Course[]>([]);
@@ -33,6 +38,8 @@ export default function InstructorDashboard() {
     const [courseYear, setCourseYear] = useState(new Date().getFullYear());
     const [courseDescription, setCourseDescription] = useState("");
     const [currentCourseId, setCurrentCourseId] = useState<string | null>(null);
+    const [pendingDocuments, setPendingDocuments] = useState<PendingDocument[]>([]);
+    const [uploadingDocuments, setUploadingDocuments] = useState(false);
 
     // Fetch courses when component mounts
     useEffect(() => {
@@ -42,7 +49,22 @@ export default function InstructorDashboard() {
             try {
                 setLoading(true);
                 const fetchedCourses = await getUserCourses(user.uid);
-                setCourses(fetchedCourses);
+                // Convert string[] to Document[] for compatibility
+                const coursesWithDocuments = fetchedCourses.map(course => ({
+                    ...course,
+                    documents: course.documents.map(doc => ({
+                        id: doc,
+                        name: doc,
+                        url: '',
+                        courseId: course.id,
+                        type: 'application/pdf',
+                        createdAt: course.createdAt,
+                        updatedAt: course.updatedAt,
+                        uploadedBy: course.userId,
+                        size: 0
+                    }))
+                }));
+                setCourses(coursesWithDocuments);
                 setError("");
             } catch (err) {
                 setError("Failed to load courses. Please try again.");
@@ -61,6 +83,7 @@ export default function InstructorDashboard() {
 
         if (courseName && courseCode && courseFaculty && courseDescription) {
             try {
+                setUploadingDocuments(true);
                 const courseData = {
                     name: courseName,
                     code: courseCode,
@@ -72,7 +95,21 @@ export default function InstructorDashboard() {
                 };
 
                 const newCourse = await createCourse(courseData);
-                setCourses([newCourse, ...courses]);
+
+                // Upload all pending documents
+                const uploadedDocuments: Document[] = [];
+                for (const pendingDoc of pendingDocuments) {
+                    const document = await uploadDocument(pendingDoc.file, newCourse.id, user.uid);
+                    uploadedDocuments.push(document);
+                }
+
+                // Add the course with uploaded documents to the state
+                const courseWithDocuments = {
+                    ...newCourse,
+                    documents: uploadedDocuments
+                };
+
+                setCourses([courseWithDocuments, ...courses]);
                 setCurrentCourseId(newCourse.id);
 
                 // Reset form
@@ -80,12 +117,23 @@ export default function InstructorDashboard() {
                 setCourseCode("");
                 setCourseFaculty("");
                 setCourseDescription("");
+                setPendingDocuments([]);
                 setError("");
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Failed to create course");
                 console.error("Error creating course:", err);
+            } finally {
+                setUploadingDocuments(false);
             }
         }
+    };
+
+    const handlePendingDocumentUpload = (file: File) => {
+        setPendingDocuments(prev => [...prev, { file, name: file.name }]);
+    };
+
+    const handleRemovePendingDocument = (fileName: string) => {
+        setPendingDocuments(prev => prev.filter(doc => doc.name !== fileName));
     };
 
     const handleDocumentUpload = (courseId: string, document: Document) => {
@@ -211,20 +259,43 @@ export default function InstructorDashboard() {
                                 />
                             </div>
 
-                            <Button type="submit">Create Course</Button>
+                            <div className="mt-6">
+                                <h3 className="text-lg font-medium mb-2">Upload Course Materials</h3>
+                                <div className="mb-4">
+                                    <DocumentUpload
+                                        courseId=""
+                                        userId={user?.uid || ""}
+                                        onUploadComplete={(file) => handlePendingDocumentUpload(file as unknown as File)}
+                                    />
+                                </div>
+                                {pendingDocuments.length > 0 && (
+                                    <div className="mt-4">
+                                        <h4 className="font-medium mb-2">Pending Uploads:</h4>
+                                        <ul className="space-y-2">
+                                            {pendingDocuments.map((doc) => (
+                                                <li key={doc.name} className="flex items-center justify-between">
+                                                    <span>{doc.name}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemovePendingDocument(doc.name)}
+                                                        className="text-red-600 hover:text-red-800"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+
+                            <Button type="submit" disabled={uploadingDocuments}>
+                                {uploadingDocuments ? "Creating Course..." : "Create Course"}
+                            </Button>
                         </form>
                     </div>
 
-                    {currentCourseId && (
-                        <div className="p-6 bg-card rounded-lg shadow">
-                            <h2 className="text-xl font-semibold mb-4">Upload Course Materials</h2>
-                            <DocumentUpload
-                                courseId={currentCourseId}
-                                userId={user.uid}
-                                onUploadComplete={(document) => handleDocumentUpload(currentCourseId, document)}
-                            />
-                        </div>
-                    )}
+
                 </div>
 
                 <div className="p-6 bg-card rounded-lg shadow">

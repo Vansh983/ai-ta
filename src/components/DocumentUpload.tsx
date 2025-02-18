@@ -5,7 +5,7 @@ import type { Document } from '@/lib/firebase/firebase.utils';
 interface DocumentUploadProps {
     courseId: string;
     userId: string;
-    onUploadComplete?: (document: Document) => void;
+    onUploadComplete?: (document: Document | File) => void;
 }
 
 export default function DocumentUpload({ courseId, userId, onUploadComplete }: DocumentUploadProps) {
@@ -66,8 +66,13 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete }: D
                     throw new Error('File size must be less than 50MB');
                 }
 
-                const document = await uploadDocument(file, courseId, userId);
-                onUploadComplete?.(document);
+                if (courseId) {
+                    const document = await uploadDocument(file, courseId, userId);
+                    onUploadComplete?.(document);
+                } else {
+                    // If no courseId, just return the File object
+                    onUploadComplete?.(file);
+                }
             }
 
             // Clear the file input
