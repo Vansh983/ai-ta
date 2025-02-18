@@ -56,6 +56,11 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete }: D
 
         try {
             for (const file of files) {
+                // Check if file is PDF
+                if (file.type !== 'application/pdf') {
+                    throw new Error('Only PDF files are allowed');
+                }
+
                 // Check file size (max 50MB)
                 if (file.size > 50 * 1024 * 1024) {
                     throw new Error('File size must be less than 50MB');
@@ -84,8 +89,8 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete }: D
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-lg p-8 text-center ${dragging
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-300 hover:border-blue-500'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-300 hover:border-blue-500'
                     }`}
             >
                 {error && (
@@ -101,7 +106,7 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete }: D
                         ) : (
                             <>
                                 <p className="text-lg font-medium">
-                                    Drag and drop your files here
+                                    Drag and drop PDF files here
                                 </p>
                                 <p className="text-sm">or</p>
                             </>
@@ -116,19 +121,20 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete }: D
                                 onChange={handleFileInput}
                                 className="hidden"
                                 multiple
+                                accept=".pdf,application/pdf"
                             />
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                                 disabled={uploading}
                             >
-                                Select Files
+                                Select PDF Files
                             </button>
                         </div>
                     )}
 
                     <p className="text-xs text-gray-500">
-                        Maximum file size: 50MB
+                        Accepts multiple PDF files • Maximum file size: 50MB per file
                     </p>
                 </div>
             </div>
