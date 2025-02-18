@@ -6,10 +6,16 @@ interface CourseCreationProps {
     onCourseCreated?: (courseId: string) => void;
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
+const TERMS = ['Fall', 'Winter', 'Summer'] as const;
+
 export default function CourseCreation({ userId, onCourseCreated }: CourseCreationProps) {
-    const [title, setTitle] = useState('');
+    const [name, setName] = useState('');
+    const [code, setCode] = useState('');
+    const [faculty, setFaculty] = useState('');
+    const [term, setTerm] = useState<'Fall' | 'Winter' | 'Summer'>('Fall');
+    const [year, setYear] = useState(CURRENT_YEAR);
     const [description, setDescription] = useState('');
-    const [courseCode, setCourseCode] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -20,15 +26,22 @@ export default function CourseCreation({ userId, onCourseCreated }: CourseCreati
 
         try {
             const course = await createCourse({
-                title,
+                name,
+                code,
+                faculty,
+                term,
+                year,
                 description,
                 userId,
-                courseCode,
             });
 
-            setTitle('');
+            // Reset form
+            setName('');
+            setCode('');
+            setFaculty('');
+            setTerm('Fall');
+            setYear(CURRENT_YEAR);
             setDescription('');
-            setCourseCode('');
             onCourseCreated?.(course.id);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to create course');
@@ -49,33 +62,90 @@ export default function CourseCreation({ userId, onCourseCreated }: CourseCreati
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label htmlFor="courseCode" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="code" className="block text-sm font-medium text-gray-700">
                         Course Code
                     </label>
                     <input
                         type="text"
-                        id="courseCode"
-                        value={courseCode}
-                        onChange={(e) => setCourseCode(e.target.value)}
+                        id="code"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
                         pattern="[A-Za-z0-9-]+"
                         title="Only letters, numbers, and hyphens are allowed"
+                        placeholder="e.g., CS101"
                     />
                 </div>
 
                 <div>
-                    <label htmlFor="title" className="block text-sm font-medium text-gray-700">
-                        Course Title
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                        Course Name
                     </label>
                     <input
                         type="text"
-                        id="title"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
+                        id="name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
+                        placeholder="e.g., Introduction to Computer Science"
                     />
+                </div>
+
+                <div>
+                    <label htmlFor="faculty" className="block text-sm font-medium text-gray-700">
+                        Faculty
+                    </label>
+                    <input
+                        type="text"
+                        id="faculty"
+                        value={faculty}
+                        onChange={(e) => setFaculty(e.target.value)}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        required
+                        placeholder="e.g., Science"
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="term" className="block text-sm font-medium text-gray-700">
+                            Term
+                        </label>
+                        <select
+                            id="term"
+                            value={term}
+                            onChange={(e) => setTerm(e.target.value as typeof TERMS[number])}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            required
+                        >
+                            {TERMS.map((t) => (
+                                <option key={t} value={t}>
+                                    {t}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label htmlFor="year" className="block text-sm font-medium text-gray-700">
+                            Year
+                        </label>
+                        <select
+                            id="year"
+                            value={year}
+                            onChange={(e) => setYear(Number(e.target.value))}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            required
+                        >
+                            {Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i).map((y) => (
+                                <option key={y} value={y}>
+                                    {y}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <div>
@@ -89,6 +159,7 @@ export default function CourseCreation({ userId, onCourseCreated }: CourseCreati
                         rows={3}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
+                        placeholder="Course description..."
                     />
                 </div>
 

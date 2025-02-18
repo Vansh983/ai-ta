@@ -20,13 +20,16 @@ import { db, storage } from './firebase.config';
 
 export interface Course {
     id: string;
-    title: string;
+    name: string;
+    code: string;
+    faculty: string;
+    term: 'Fall' | 'Winter' | 'Summer';
+    year: number;
     description: string;
     createdAt: Date;
     updatedAt: Date;
     documents: string[];
-    userId: string;  // ID of the user who created the course
-    courseCode: string;  // Special course code for identification
+    userId: string;
 }
 
 export interface Document {
@@ -43,15 +46,22 @@ export interface Document {
 
 // Course Functions
 export const createCourse = async (courseData: {
-    title: string;
+    name: string;
+    code: string;
+    faculty: string;
+    term: 'Fall' | 'Winter' | 'Summer';
+    year: number;
     description: string;
     userId: string;
-    courseCode: string;
 }) => {
-    // Check if course code already exists
-    const existingCourse = await getCourseByCode(courseData.courseCode);
+    // Check if course code already exists for the same year and term
+    const existingCourse = await getCourseByCodeAndTerm(
+        courseData.code,
+        courseData.term,
+        courseData.year
+    );
     if (existingCourse) {
-        throw new Error('Course code already exists');
+        throw new Error('Course already exists for this term and year');
     }
 
     const courseRef = doc(collection(db, 'courses'));
@@ -69,9 +79,26 @@ export const createCourse = async (courseData: {
     return course;
 };
 
-export const getCourseByCode = async (courseCode: string) => {
+export const getCourseByCodeAndTerm = async (code: string, term: string, year: number) => {
     const coursesRef = collection(db, 'courses');
-    const q = query(coursesRef, where('courseCode', '==', courseCode));
+    const q = query(
+        coursesRef,
+        where('code', '==', code),
+        where('term', '==', term),
+        where('year', '==', year)
+    );
+    const courseSnap = await getDocs(q);
+
+    if (courseSnap.empty) {
+        return null;
+    }
+
+    return courseSnap.docs[0].data() as Course;
+};
+
+export const getCourseByCode = async (code: string) => {
+    const coursesRef = collection(db, 'courses');
+    const q = query(coursesRef, where('code', '==', code));
     const courseSnap = await getDocs(q);
 
     if (courseSnap.empty) {
@@ -197,4 +224,32 @@ export const deleteDocument = async (documentId: string, userId: string) => {
         documents: course.documents.filter(id => id !== documentId),
         updatedAt: new Date(),
     });
+};
+
+// Add a new function to get courses by faculty
+export const getCoursesByFaculty = async (faculty: string, userId: string) => {
+    const coursesRef = collection(db, 'courses');
+    const q = query(
+        coursesRef,
+        where('faculty', '==', faculty),
+        where('userId', '==', userId),
+        orderBy('year', 'desc'),
+        orderBy('term', 'desc')
+    );
+    const coursesSnap = await getDocs(q);
+    return coursesSnap.docs.map(doc => doc.data() as Course);
+};
+
+// Add a new function to get courses by term
+export const getCoursesByTerm = async (term: string, year: number, userId: string) => {
+    const coursesRef = collection(db, 'courses');
+    const q = query(
+        coursesRef,
+        where('term', '==', term),
+        where('year', '==', year),
+        where('userId', '==', userId),
+        orderBy('code', 'asc')
+    );
+    const coursesSnap = await getDocs(q);
+    return coursesSnap.docs.map(doc => doc.data() as Course);
 }; 
