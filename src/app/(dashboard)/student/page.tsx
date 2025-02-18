@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/firebase.config";
 
 interface Message {
     id: string;
@@ -13,26 +15,46 @@ interface Message {
 interface Course {
     id: string;
     name: string;
+    code: string;
+    faculty: string;
+    term: 'Fall' | 'Winter' | 'Summer';
+    year: number;
     description: string;
+    createdAt: Date;
+    updatedAt: Date;
+    documents: string[];
+    userId: string;
 }
-
-const mockCourses: Course[] = [
-    {
-        id: "1",
-        name: "Introduction to Computer Science",
-        description: "Learn the basics of programming and computer science concepts.",
-    },
-    {
-        id: "2",
-        name: "Web Development Fundamentals",
-        description: "Master HTML, CSS, and JavaScript for web development.",
-    },
-];
 
 export default function StudentDashboard() {
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+    const [courses, setCourses] = useState<Course[]>([]);
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchCourses = async () => {
+            try {
+                const coursesRef = collection(db, 'courses');
+                const coursesSnap = await getDocs(coursesRef);
+                const coursesData = coursesSnap.docs.map(doc => ({
+                    ...doc.data(),
+                    id: doc.id,
+                    createdAt: doc.data().createdAt?.toDate(),
+                    updatedAt: doc.data().updatedAt?.toDate(),
+                })) as Course[];
+
+                setCourses(coursesData);
+            } catch (error) {
+                console.error("Error fetching courses:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCourses();
+    }, []);
 
     const handleSendMessage = (e: React.FormEvent) => {
         e.preventDefault();
@@ -70,23 +92,34 @@ export default function StudentDashboard() {
                 <div className="md:col-span-1">
                     <div className="p-6 bg-card rounded-lg shadow">
                         <h2 className="text-xl font-semibold mb-4">Available Courses</h2>
-                        <div className="space-y-4">
-                            {mockCourses.map((course) => (
-                                <button
-                                    key={course.id}
-                                    onClick={() => setSelectedCourse(course)}
-                                    className={`w-full p-4 text-left border rounded-md transition-colors ${selectedCourse?.id === course.id
+                        {loading ? (
+                            <div className="flex items-center justify-center p-4">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                            </div>
+                        ) : courses.length > 0 ? (
+                            <div className="space-y-4">
+                                {courses.map((course) => (
+                                    <button
+                                        key={course.id}
+                                        onClick={() => setSelectedCourse(course)}
+                                        className={`w-full p-4 text-left border rounded-md transition-colors ${selectedCourse?.id === course.id
                                             ? "bg-primary text-primary-foreground"
                                             : "hover:bg-accent/50"
-                                        }`}
-                                >
-                                    <h3 className="font-medium">{course.name}</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {course.description}
-                                    </p>
-                                </button>
-                            ))}
-                        </div>
+                                            }`}
+                                    >
+                                        <h3 className="font-medium">{course.name}</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            {course.description}
+                                        </p>
+                                        <div className="mt-2 text-xs text-muted-foreground">
+                                            <span className="font-medium">{course.code}</span> • {course.term} {course.year}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-center text-muted-foreground">No courses available</p>
+                        )}
                     </div>
                 </div>
 
@@ -109,8 +142,8 @@ export default function StudentDashboard() {
                                     >
                                         <div
                                             className={`max-w-[80%] p-3 rounded-lg ${message.sender === "user"
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted"
+                                                ? "bg-primary text-primary-foreground"
+                                                : "bg-muted"
                                                 }`}
                                         >
                                             <p>{message.content}</p>
