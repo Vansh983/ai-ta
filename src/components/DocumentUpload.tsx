@@ -3,12 +3,13 @@ import { uploadDocument } from '@/lib/firebase/firebase.utils';
 import type { Document } from '@/lib/firebase/firebase.utils';
 
 interface DocumentUploadProps {
-    courseId: string;
+    courseId: string | null;
     userId: string;
     onUploadComplete?: (document: Document | File) => void;
+    isPending?: boolean;
 }
 
-export default function DocumentUpload({ courseId, userId, onUploadComplete }: DocumentUploadProps) {
+export default function DocumentUpload({ courseId, userId, onUploadComplete, isPending }: DocumentUploadProps) {
     const [dragging, setDragging] = useState(false);
     const [error, setError] = useState('');
     const [uploading, setUploading] = useState(false);
@@ -66,23 +67,23 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete }: D
                     throw new Error('File size must be less than 50MB');
                 }
 
-                if (courseId) {
+                if (isPending) {
+                    // If pending, just pass the file back
+                    onUploadComplete?.(file);
+                } else if (courseId) {
+                    // If we have a courseId, upload the document
                     const document = await uploadDocument(file, courseId, userId);
                     onUploadComplete?.(document);
-                } else {
-                    // If no courseId, just return the File object
-                    onUploadComplete?.(file);
                 }
-            }
-
-            // Clear the file input
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to upload document');
+            console.error('Error uploading document:', err);
         } finally {
             setUploading(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
         }
     };
 

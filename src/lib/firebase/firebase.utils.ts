@@ -42,6 +42,7 @@ export interface Document {
     updatedAt: Date;
     uploadedBy: string;  // ID of the user who uploaded the document
     size: number;  // File size in bytes
+    storagePath?: string;
 }
 
 // Course Functions
@@ -140,17 +141,29 @@ export const uploadDocument = async (file: File, courseId: string, userId: strin
     }
 
     const timestamp = new Date();
+    // Create a clean filename with timestamp to avoid collisions
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'pdf';
     const safeFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const storageRef = ref(storage, `documents/${courseId}/${safeFileName}`);
+    // Store files directly in courses bucket
+    const storagePath = `courses/${courseId}/${safeFileName}`;
+    const storageRef = ref(storage, storagePath);
 
     // Upload file to Firebase Storage
     await uploadBytes(storageRef, file);
     const downloadUrl = await getDownloadURL(storageRef);
 
-    // Create document reference in Firestore
-    const documentRef = doc(collection(db, 'documents'));
-    const document: Document = {
-        id: documentRef.id,
+    // Generate a unique ID for the document
+    const documentId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Update course's documents array with the new document
+    const courseRef = doc(db, 'courses', courseId);
+    await updateDoc(courseRef, {
+        documents: [...course.documents, documentId],
+        updatedAt: timestamp,
+    });
+
+    return {
+        id: documentId,
         name: file.name,
         url: downloadUrl,
         courseId,
@@ -159,29 +172,40 @@ export const uploadDocument = async (file: File, courseId: string, userId: strin
         updatedAt: timestamp,
         uploadedBy: userId,
         size: file.size,
+        storagePath,
     };
-
-    await setDoc(documentRef, document);
-
-    // Update course's documents array
-    const courseRef = doc(db, 'courses', courseId);
-    await updateDoc(courseRef, {
-        documents: [...course.documents, document.id],
-        updatedAt: timestamp,
-    });
-
-    return document;
 };
 
-export const getDocument = async (documentId: string) => {
-    const documentRef = doc(db, 'documents', documentId);
-    const documentSnap = await getDoc(documentRef);
+export const getDocument = async (documentId: string, courseId: string) => {
+    const courseRef = doc(db, 'courses', courseId);
+    const courseSnap = await getDoc(courseRef);
 
-    if (!documentSnap.exists()) {
-        throw new Error('Document not found');
+    if (!courseSnap.exists()) {
+        throw new Error('Course not found');
     }
 
-    return documentSnap.data() as Document;
+    const course = courseSnap.data() as Course;
+    if (!course.documents.includes(documentId)) {
+        throw new Error('Document not found in course');
+    }
+
+    // Return the document metadata from storage
+    const storagePath = `courses/${courseId}/${documentId}`;
+    const storageRef = ref(storage, storagePath);
+    const url = await getDownloadURL(storageRef);
+
+    return {
+        id: documentId,
+        name: documentId.split('-').slice(1).join('-'), // Extract original filename
+        url,
+        courseId,
+        type: 'application/pdf',
+        createdAt: new Date(parseInt(documentId.split('-')[0])),
+        updatedAt: new Date(parseInt(documentId.split('-')[0])),
+        uploadedBy: course.userId,
+        size: 0, // Size information not available from storage directly
+        storagePath,
+    };
 };
 
 export const getCourseDocuments = async (courseId: string, userId: string) => {
@@ -192,19 +216,22 @@ export const getCourseDocuments = async (courseId: string, userId: string) => {
         throw new Error('Unauthorized to access course documents');
     }
 
-    const documentsRef = collection(db, 'documents');
-    const q = query(
-        documentsRef,
-        where('courseId', '==', courseId),
-        orderBy('createdAt', 'desc')
+    // Get all document IDs from the course
+    const documentIds = course.documents || [];
+
+    // Fetch all documents
+    const documents = await Promise.all(
+        documentIds.map(docId => getDocument(docId, courseId))
     );
-    const documentsSnap = await getDocs(q);
-    return documentsSnap.docs.map(doc => doc.data() as Document);
+
+    // Sort by creation date, newest first
+    return documents.sort((a, b) =>
+        b.createdAt.getTime() - a.createdAt.getTime()
+    );
 };
 
-export const deleteDocument = async (documentId: string, userId: string) => {
-    const document = await getDocument(documentId);
-    const course = await getCourse(document.courseId);
+export const deleteDocument = async (documentId: string, courseId: string, userId: string) => {
+    const course = await getCourse(courseId);
 
     // Verify user has access to delete the document
     if (course.userId !== userId) {
@@ -212,14 +239,12 @@ export const deleteDocument = async (documentId: string, userId: string) => {
     }
 
     // Delete from Storage
-    const storageRef = ref(storage, `documents/${document.courseId}/${document.name}`);
+    const storagePath = `courses/${courseId}/${documentId}`;
+    const storageRef = ref(storage, storagePath);
     await deleteObject(storageRef);
 
-    // Delete from Firestore
-    await deleteDoc(doc(db, 'documents', documentId));
-
     // Update course's documents array
-    const courseRef = doc(db, 'courses', document.courseId);
+    const courseRef = doc(db, 'courses', courseId);
     await updateDoc(courseRef, {
         documents: course.documents.filter(id => id !== documentId),
         updatedAt: new Date(),

@@ -4,13 +4,8 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/firebase.config";
-
-interface Message {
-    id: string;
-    content: string;
-    sender: "user" | "ai";
-    timestamp: Date;
-}
+import { sendMessage, refreshCourse, type ChatMessage } from "@/lib/services/chat";
+import { toast } from "sonner";
 
 interface Course {
     id: string;
@@ -29,9 +24,10 @@ interface Course {
 export default function StudentDashboard() {
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
     const [courses, setCourses] = useState<Course[]>([]);
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
+    const [sendingMessage, setSendingMessage] = useState(false);
 
     useEffect(() => {
         const fetchCourses = async () => {
@@ -48,6 +44,7 @@ export default function StudentDashboard() {
                 setCourses(coursesData);
             } catch (error) {
                 console.error("Error fetching courses:", error);
+                toast.error("Failed to fetch courses");
             } finally {
                 setLoading(false);
             }
@@ -56,31 +53,51 @@ export default function StudentDashboard() {
         fetchCourses();
     }, []);
 
-    const handleSendMessage = (e: React.FormEvent) => {
+    const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (newMessage.trim()) {
-            const userMessage: Message = {
-                id: Date.now().toString(),
-                content: newMessage,
-                sender: "user",
+        if (!selectedCourse || !newMessage.trim() || sendingMessage) return;
+
+        const userMessage: ChatMessage = {
+            id: Date.now().toString(),
+            content: newMessage,
+            sender: "user",
+            timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+        setNewMessage("");
+        setSendingMessage(true);
+
+        try {
+            const response = await sendMessage(selectedCourse.id, userMessage.content);
+
+            const aiMessage: ChatMessage = {
+                id: (Date.now() + 1).toString(),
+                content: response.answer,
+                sender: "ai",
                 timestamp: new Date(),
             };
 
-            // Add user message
-            setMessages((prev) => [...prev, userMessage]);
+            setMessages(prev => [...prev, aiMessage]);
+        } catch (error) {
+            console.error("Error sending message:", error);
+            toast.error("Failed to get AI response");
+        } finally {
+            setSendingMessage(false);
+        }
+    };
 
-            // Mock AI response
-            setTimeout(() => {
-                const aiMessage: Message = {
-                    id: (Date.now() + 1).toString(),
-                    content: "This is a mock AI response. In a real implementation, this would be connected to your AI backend.",
-                    sender: "ai",
-                    timestamp: new Date(),
-                };
-                setMessages((prev) => [...prev, aiMessage]);
-            }, 1000);
+    const handleCourseSelect = async (course: Course) => {
+        setSelectedCourse(course);
+        setMessages([]); // Clear messages when switching courses
 
-            setNewMessage("");
+        try {
+            // Refresh the course content when selected
+            await refreshCourse(course.id);
+            toast.success("Course content refreshed");
+        } catch (error) {
+            console.error("Error refreshing course:", error);
+            toast.error("Failed to refresh course content");
         }
     };
 
@@ -101,24 +118,23 @@ export default function StudentDashboard() {
                                 {courses.map((course) => (
                                     <button
                                         key={course.id}
-                                        onClick={() => setSelectedCourse(course)}
-                                        className={`w-full p-4 text-left border rounded-md transition-colors ${selectedCourse?.id === course.id
+                                        onClick={() => handleCourseSelect(course)}
+                                        className={`w-full p-4 text-left rounded-lg transition-colors ${selectedCourse?.id === course.id
                                             ? "bg-primary text-primary-foreground"
-                                            : "hover:bg-accent/50"
+                                            : "bg-card hover:bg-accent/50"
                                             }`}
                                     >
                                         <h3 className="font-medium">{course.name}</h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            {course.description}
+                                        <p className="text-sm opacity-80">
+                                            {course.code} • {course.term} {course.year}
                                         </p>
-                                        <div className="mt-2 text-xs text-muted-foreground">
-                                            <span className="font-medium">{course.code}</span> • {course.term} {course.year}
-                                        </div>
                                     </button>
                                 ))}
                             </div>
                         ) : (
-                            <p className="text-center text-muted-foreground">No courses available</p>
+                            <p className="text-center text-muted-foreground">
+                                No courses available
+                            </p>
                         )}
                     </div>
                 </div>
@@ -162,8 +178,11 @@ export default function StudentDashboard() {
                                     onChange={(e) => setNewMessage(e.target.value)}
                                     placeholder="Type your message..."
                                     className="flex-1 p-2 border rounded-md"
+                                    disabled={sendingMessage}
                                 />
-                                <Button type="submit">Send</Button>
+                                <Button type="submit" disabled={sendingMessage}>
+                                    {sendingMessage ? "Sending..." : "Send"}
+                                </Button>
                             </form>
                         </div>
                     ) : (

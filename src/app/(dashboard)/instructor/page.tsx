@@ -97,11 +97,11 @@ export default function InstructorDashboard() {
                 const newCourse = await createCourse(courseData);
 
                 // Upload all pending documents
-                const uploadedDocuments: Document[] = [];
-                for (const pendingDoc of pendingDocuments) {
-                    const document = await uploadDocument(pendingDoc.file, newCourse.id, user.uid);
-                    uploadedDocuments.push(document);
-                }
+                const uploadPromises = pendingDocuments.map(pendingDoc =>
+                    uploadDocument(pendingDoc.file, newCourse.id, user.uid)
+                );
+
+                const uploadedDocuments = await Promise.all(uploadPromises);
 
                 // Add the course with uploaded documents to the state
                 const courseWithDocuments = {
@@ -116,6 +116,8 @@ export default function InstructorDashboard() {
                 setCourseName("");
                 setCourseCode("");
                 setCourseFaculty("");
+                setCourseTerm('Fall');
+                setCourseYear(new Date().getFullYear());
                 setCourseDescription("");
                 setPendingDocuments([]);
                 setError("");
@@ -263,9 +265,10 @@ export default function InstructorDashboard() {
                                 <h3 className="text-lg font-medium mb-2">Upload Course Materials</h3>
                                 <div className="mb-4">
                                     <DocumentUpload
-                                        courseId=""
+                                        courseId={null}
                                         userId={user?.uid || ""}
                                         onUploadComplete={(file) => handlePendingDocumentUpload(file as unknown as File)}
+                                        isPending={true}
                                     />
                                 </div>
                                 {pendingDocuments.length > 0 && (
