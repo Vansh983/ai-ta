@@ -33,30 +33,6 @@ export default function Home() {
           </Link>
         </div>
       </div>
-
-      <div className="mt-20">
-        <h2 className="text-2xl font-semibold mb-6">Key Features</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl">
-          <div className="p-6 bg-card rounded-lg shadow">
-            <h3 className="font-medium mb-2">AI-Powered Learning</h3>
-            <p className="text-sm text-muted-foreground">
-              Intelligent assistance based on course materials
-            </p>
-          </div>
-          <div className="p-6 bg-card rounded-lg shadow">
-            <h3 className="font-medium mb-2">Easy Content Management</h3>
-            <p className="text-sm text-muted-foreground">
-              Simple tools for uploading and organizing course content
-            </p>
-          </div>
-          <div className="p-6 bg-card rounded-lg shadow">
-            <h3 className="font-medium mb-2">Interactive Experience</h3>
-            <p className="text-sm text-muted-foreground">
-              Engaging interface for both instructors and students
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/firebase.config";
-import { sendMessage, refreshCourse, type ChatMessage } from "@/lib/services/chat";
+import { sendMessage, refreshCourse, type ChatMessage, storeMessage, getChatHistory } from "@/lib/services/chat";
 import { toast } from "sonner";
+import { auth } from "@/lib/firebase/firebase.config";
 
 interface Course {
     id: string;
@@ -28,6 +29,12 @@ export default function StudentDashboard() {
     const [newMessage, setNewMessage] = useState("");
     const [loading, setLoading] = useState(true);
     const [sendingMessage, setSendingMessage] = useState(false);
+    const [loadingChat, setLoadingChat] = useState(false);
+    const [sampleQuestions] = useState([
+        "What are the main topics covered in this course?",
+        "What are the prerequisites for this course?",
+        "What are the learning objectives of this course?",
+    ]);
 
     useEffect(() => {
         const fetchCourses = async () => {
@@ -53,6 +60,29 @@ export default function StudentDashboard() {
         fetchCourses();
     }, []);
 
+    useEffect(() => {
+        const loadChatHistory = async () => {
+            if (!selectedCourse) return;
+
+            setLoadingChat(true);
+            try {
+                const history = await getChatHistory(selectedCourse.id);
+                setMessages(history);
+            } catch (error) {
+                console.error("Error fetching chat history:", error);
+                if (error instanceof Error && error.message.includes('requires an index')) {
+                    toast.error("Chat history index is being built. Please try again in a few minutes.");
+                } else {
+                    toast.error("Failed to load chat history");
+                }
+            } finally {
+                setLoadingChat(false);
+            }
+        };
+
+        loadChatHistory();
+    }, [selectedCourse]);
+
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedCourse || !newMessage.trim() || sendingMessage) return;
@@ -62,6 +92,8 @@ export default function StudentDashboard() {
             content: newMessage,
             sender: "user",
             timestamp: new Date(),
+            courseId: selectedCourse.id,
+            userId: auth.currentUser?.uid,
         };
 
         setMessages(prev => [...prev, userMessage]);
@@ -69,6 +101,8 @@ export default function StudentDashboard() {
         setSendingMessage(true);
 
         try {
+            await storeMessage(userMessage);
+
             const response = await sendMessage(selectedCourse.id, userMessage.content);
 
             const aiMessage: ChatMessage = {
@@ -76,7 +110,10 @@ export default function StudentDashboard() {
                 content: response.answer,
                 sender: "ai",
                 timestamp: new Date(),
+                courseId: selectedCourse.id,
             };
+
+            await storeMessage(aiMessage);
 
             setMessages(prev => [...prev, aiMessage]);
         } catch (error) {
@@ -99,6 +136,10 @@ export default function StudentDashboard() {
             console.error("Error refreshing course:", error);
             toast.error("Failed to refresh course content");
         }
+    };
+
+    const handleQuestionSelect = (question: string) => {
+        setNewMessage(question);
     };
 
     return (
@@ -147,28 +188,47 @@ export default function StudentDashboard() {
                                 <p className="text-sm text-muted-foreground">
                                     {selectedCourse.description}
                                 </p>
+                                <div className="mt-4 space-y-2">
+                                    <p className="text-sm font-medium">Sample Questions:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {sampleQuestions.map((question, index) => (
+                                            <button
+                                                key={index}
+                                                onClick={() => handleQuestionSelect(question)}
+                                                className="text-sm px-3 py-1.5 bg-accent hover:bg-accent/80 rounded-full transition-colors"
+                                            >
+                                                {question}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                                {messages.map((message) => (
-                                    <div
-                                        key={message.id}
-                                        className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"
-                                            }`}
-                                    >
-                                        <div
-                                            className={`max-w-[80%] p-3 rounded-lg ${message.sender === "user"
-                                                ? "bg-primary text-primary-foreground"
-                                                : "bg-muted"
-                                                }`}
-                                        >
-                                            <p>{message.content}</p>
-                                            <span className="text-xs opacity-70">
-                                                {message.timestamp.toLocaleTimeString()}
-                                            </span>
-                                        </div>
+                                {loadingChat ? (
+                                    <div className="flex items-center justify-center h-full">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                                     </div>
-                                ))}
+                                ) : (
+                                    messages.map((message) => (
+                                        <div
+                                            key={message.id}
+                                            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+                                        >
+                                            <div
+                                                className={`max-w-[80%] p-3 rounded-lg ${message.sender === "user"
+                                                    ? "bg-primary text-primary-foreground"
+                                                    : "bg-muted"
+                                                    }`}
+                                            >
+                                                <p>{message.content}</p>
+                                                <span className="text-xs opacity-70">
+                                                    {message.timestamp.toLocaleTimeString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
 
                             <form onSubmit={handleSendMessage} className="flex gap-2">

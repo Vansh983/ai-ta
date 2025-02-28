@@ -23,7 +23,7 @@ export function BaseLayout({ children }: BaseLayoutProps) {
                         <Container size="4">
                             <Flex justify="between" align="center">
                                 <Text size="2" color="gray">
-                                    © 2024 Your Company. All rights reserved.
+                                    Being developed by Vansh
                                 </Text>
                             </Flex>
                         </Container>
