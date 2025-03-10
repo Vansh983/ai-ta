@@ -64,9 +64,12 @@ export default function StudentDashboard() {
         const loadChatHistory = async () => {
             if (!selectedCourse) return;
 
+            // Get user ID if authenticated, otherwise use a guest ID
+            const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
+
             setLoadingChat(true);
             try {
-                const history = await getChatHistory(selectedCourse.id);
+                const history = await getChatHistory(selectedCourse.id, userId);
                 setMessages(history);
             } catch (error) {
                 console.error("Error fetching chat history:", error);
@@ -87,13 +90,29 @@ export default function StudentDashboard() {
         e.preventDefault();
         if (!selectedCourse || !newMessage.trim() || sendingMessage) return;
 
+        // Get user ID if authenticated, otherwise use a guest ID
+        const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
+
+        // Validate data before creating message object
+        const courseId = selectedCourse?.id || "";
+        if (!courseId) {
+            toast.error("No course selected");
+            return;
+        }
+
+        const messageContent = newMessage.trim();
+        if (!messageContent) {
+            toast.error("Message cannot be empty");
+            return;
+        }
+
         const userMessage: ChatMessage = {
             id: Date.now().toString(),
-            content: newMessage,
+            content: messageContent,
             sender: "user",
             timestamp: new Date(),
-            courseId: selectedCourse.id,
-            userId: auth.currentUser?.uid,
+            courseId: courseId,
+            userId: userId,
         };
 
         setMessages(prev => [...prev, userMessage]);
@@ -101,20 +120,35 @@ export default function StudentDashboard() {
         setSendingMessage(true);
 
         try {
+            // Store user message in Firebase
             await storeMessage(userMessage);
 
-            const response = await sendMessage(selectedCourse.id, userMessage.content);
+            // Send message to backend
+            const response = await sendMessage(
+                courseId,
+                messageContent,
+                userId
+            );
 
+            // Validate response
+            if (!response || !response.answer) {
+                throw new Error("Invalid response from server");
+            }
+
+            // Create AI message
             const aiMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
                 content: response.answer,
                 sender: "ai",
                 timestamp: new Date(),
-                courseId: selectedCourse.id,
+                courseId: courseId,
+                userId: userId,
             };
 
+            // Store AI message in Firebase
             await storeMessage(aiMessage);
 
+            // Update UI
             setMessages(prev => [...prev, aiMessage]);
         } catch (error) {
             console.error("Error sending message:", error);
@@ -128,9 +162,12 @@ export default function StudentDashboard() {
         setSelectedCourse(course);
         setMessages([]); // Clear messages when switching courses
 
+        // Get user ID if authenticated, otherwise use a guest ID
+        const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
+
         try {
             // Refresh the course content when selected
-            await refreshCourse(course.id);
+            await refreshCourse(course.id, userId);
             toast.success("Course content refreshed");
         } catch (error) {
             console.error("Error refreshing course:", error);
