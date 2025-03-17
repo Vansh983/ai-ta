@@ -1,4 +1,4 @@
-interface UserToken {
+export interface UserToken {
     token: string;
     userId: string;
     role: 'student' | 'instructor' | 'admin';
