@@ -2,12 +2,34 @@ import { userTokens, type UserToken } from './tokens.config';
 
 export interface AuthUser {
     userId: string;
+    uid: string; // Alias for userId to maintain compatibility
     email: string;
     displayName: string;
     role: 'student' | 'instructor' | 'admin';
 }
 
+export type Role = AuthUser['role'];
+
 const TOKEN_KEY = 'auth_token';
+
+// Role checking utilities
+export const isInstructor = (user: AuthUser | null): boolean => {
+    return user?.role === 'instructor' || user?.role === 'admin';
+};
+
+export const isStudent = (user: AuthUser | null): boolean => {
+    return user?.role === 'student';
+};
+
+export const isAdmin = (user: AuthUser | null): boolean => {
+    return user?.role === 'admin';
+};
+
+// Role-based access control HOC
+export const requireRole = (allowedRoles: Role[]): boolean => {
+    const user = getCurrentUser();
+    return user !== null && allowedRoles.includes(user.role);
+};
 
 export const setAuthToken = (token: string) => {
     localStorage.setItem(TOKEN_KEY, token);
@@ -32,6 +54,7 @@ export const signIn = async (token: string): Promise<AuthUser> => {
     setAuthToken(token);
     return {
         userId: userToken.userId,
+        uid: userToken.userId, // Set uid as alias for userId
         email: userToken.email,
         displayName: userToken.displayName,
         role: userToken.role
@@ -54,6 +77,7 @@ export const getCurrentUser = (): AuthUser | null => {
 
     return {
         userId: userToken.userId,
+        uid: userToken.userId, // Set uid as alias for userId
         email: userToken.email,
         displayName: userToken.displayName,
         role: userToken.role

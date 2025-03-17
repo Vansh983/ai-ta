@@ -131,6 +131,40 @@ export const getUserCourses = async (userId: string) => {
     return coursesSnap.docs.map(doc => doc.data() as Course);
 };
 
+export const updateCourse = async (courseId: string, courseData: {
+    name: string;
+    code: string;
+    faculty: string;
+    term: 'Fall' | 'Winter' | 'Summer';
+    year: number;
+    description: string;
+    userId: string;
+}) => {
+    const courseRef = doc(db, 'courses', courseId);
+    const timestamp = new Date();
+
+    // Check if another course with the same code exists for the same term and year (excluding this course)
+    const existingCourse = await getCourseByCodeAndTerm(
+        courseData.code,
+        courseData.term,
+        courseData.year
+    );
+    if (existingCourse && existingCourse.id !== courseId) {
+        throw new Error('Another course already exists with this code for the same term and year');
+    }
+
+    await updateDoc(courseRef, {
+        ...courseData,
+        updatedAt: timestamp
+    });
+
+    return {
+        id: courseId,
+        ...courseData,
+        updatedAt: timestamp
+    };
+};
+
 // Document Functions
 export const uploadDocument = async (file: File, courseId: string, userId: string) => {
     const course = await getCourse(courseId);

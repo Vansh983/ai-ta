@@ -12,14 +12,14 @@ export default function SignInPage() {
         <>
             <SignIn onSignIn={() => router.push('/')} />
 
-            <Box className="mt-6 text-center">
+            {/* <Box className="mt-6 text-center">
                 <Text size="2" color="gray">
                     Don't have an account?{' '}
                     <Link href="/signup" passHref legacyBehavior>
                         <RadixLink>Sign up</RadixLink>
                     </Link>
                 </Text>
-            </Box>
+            </Box> */}
         </>
     );
 } 
