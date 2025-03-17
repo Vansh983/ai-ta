@@ -47,7 +47,7 @@ export function MainNav() {
                                 </RadixLink>
                             </Link>
 
-                            <Flex asChild gap="6">
+                            {/* <Flex asChild gap="6">
                                 <nav>
                                     {navItems.map((item) => (
                                         item && (
@@ -63,7 +63,7 @@ export function MainNav() {
                                         )
                                     ))}
                                 </nav>
-                            </Flex>
+                            </Flex> */}
 
                             <Flex gap="3">
                                 {user ? (

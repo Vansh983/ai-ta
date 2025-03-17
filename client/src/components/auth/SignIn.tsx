@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { signIn } from '@/lib/firebase/auth.utils';
+import { signIn } from '@/lib/auth/auth.utils';
 
 interface SignInProps {
     onSignIn?: () => void;
 }
 
 export default function SignIn({ onSignIn }: SignInProps) {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const [token, setToken] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -17,7 +16,7 @@ export default function SignIn({ onSignIn }: SignInProps) {
         setLoading(true);
 
         try {
-            await signIn(email, password);
+            await signIn(token);
             onSignIn?.();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to sign in');
@@ -38,31 +37,17 @@ export default function SignIn({ onSignIn }: SignInProps) {
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                        Email
-                    </label>
-                    <input
-                        type="email"
-                        id="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        required
-                    />
-                </div>
-
-                <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                        Password
+                    <label htmlFor="token" className="block text-sm font-medium text-gray-700">
+                        Access Token
                     </label>
                     <input
                         type="password"
-                        id="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        id="token"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
-                        minLength={6}
+                        placeholder="Enter your access token"
                     />
                 </div>
 
