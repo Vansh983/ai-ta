@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { signUp } from '@/lib/firebase/auth.utils';
+import { createUserDocument, UserRole } from '@/lib/firebase/user.utils';
 
 interface SignUpProps {
     onSignUp?: () => void;
@@ -9,6 +10,7 @@ export default function SignUp({ onSignUp }: SignUpProps) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [role, setRole] = useState<UserRole>('student');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -24,7 +26,8 @@ export default function SignUp({ onSignUp }: SignUpProps) {
         setLoading(true);
 
         try {
-            await signUp(email, password);
+            const user = await signUp(email, password);
+            await createUserDocument(user, role);
             onSignUp?.();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to sign up');
@@ -56,6 +59,22 @@ export default function SignUp({ onSignUp }: SignUpProps) {
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
                         required
                     />
+                </div>
+
+                <div>
+                    <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                        Role
+                    </label>
+                    <select
+                        id="role"
+                        value={role}
+                        onChange={(e) => setRole(e.target.value as UserRole)}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        required
+                    >
+                        <option value="student">Student</option>
+                        <option value="instructor">Instructor</option>
+                    </select>
                 </div>
 
                 <div>

@@ -8,13 +8,24 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export function MainNav() {
     const pathname = usePathname();
-    const { user, signOut } = useAuth();
+    const { user, userRole, signOut } = useAuth();
+
+    const getDashboardItem = () => {
+        if (!user || !userRole) return null;
+
+        if (userRole === 'instructor') {
+            return { href: "/instructor", label: "Instructor Dashboard" };
+        }
+        if (userRole === 'student') {
+            return { href: "/student", label: "Student Dashboard" };
+        }
+        return null;
+    };
 
     const navItems = [
         { href: "/", label: "Home" },
-        { href: "/instructor", label: "Instructor Dashboard", protected: true },
-        { href: "/student", label: "Student Dashboard", protected: true },
-    ];
+        getDashboardItem(),
+    ].filter(Boolean);
 
     const handleSignOut = async () => {
         try {
@@ -39,7 +50,7 @@ export function MainNav() {
                             <Flex asChild gap="6">
                                 <nav>
                                     {navItems.map((item) => (
-                                        (!item.protected || user) && (
+                                        item && (
                                             <Link key={item.href} href={item.href} passHref legacyBehavior>
                                                 <RadixLink
                                                     color={pathname === item.href ? "indigo" : "gray"}
@@ -58,7 +69,7 @@ export function MainNav() {
                                 {user ? (
                                     <>
                                         <Text size="2" color="gray">
-                                            {user.email}
+                                            {user.email} ({userRole})
                                         </Text>
                                         <Button variant="soft" color="gray" onClick={handleSignOut}>
                                             Sign Out
