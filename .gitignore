@@ -63,5 +63,3 @@ client/.env.test.local
 client/.env.production.local
 
 client/yarn.lock
-
-client/src/lib/auth/tokens.config.ts
