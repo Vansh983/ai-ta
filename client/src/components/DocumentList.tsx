@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getCourseDocuments, deleteDocument, type Document } from '@/lib/firebase/firebase.utils';
 
 interface DocumentListProps {
@@ -13,7 +13,7 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
     const [error, setError] = useState('');
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
-    const loadDocuments = async () => {
+    const loadDocuments = useCallback(async () => {
         try {
             const docs = await getCourseDocuments(courseId, userId);
             setDocuments(docs);
@@ -23,11 +23,11 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
         } finally {
             setLoading(false);
         }
-    };
+    }, [courseId, userId]);
 
     useEffect(() => {
         loadDocuments();
-    }, [courseId, userId]);
+    }, [loadDocuments]);
 
     const handleDelete = async (documentId: string) => {
         if (!confirm('Are you sure you want to delete this document?')) {
@@ -36,7 +36,7 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
 
         setDeletingId(documentId);
         try {
-            await deleteDocument(documentId, userId);
+            await deleteDocument(documentId, courseId, userId);
             await loadDocuments();
             onDocumentDeleted?.();
         } catch (err) {

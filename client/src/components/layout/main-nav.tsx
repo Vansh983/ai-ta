@@ -2,30 +2,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { Box, Container, Flex, Button, Text, Link as RadixLink } from "@radix-ui/themes";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function MainNav() {
-    const pathname = usePathname();
     const { user, userRole, signOut } = useAuth();
-
-    const getDashboardItem = () => {
-        if (!user || !userRole) return null;
-
-        if (userRole === 'instructor') {
-            return { href: "/instructor", label: "Instructor Dashboard" };
-        }
-        if (userRole === 'student') {
-            return { href: "/student", label: "Student Dashboard" };
-        }
-        return null;
-    };
-
-    const navItems = [
-        { href: "/", label: "Home" },
-        getDashboardItem(),
-    ].filter(Boolean);
 
     const handleSignOut = async () => {
         try {

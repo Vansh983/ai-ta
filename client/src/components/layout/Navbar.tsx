@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import ThemeToggle from '@/components/ui/ThemeToggle';
 import { Box, Container, Flex, Text, DropdownMenu, Avatar } from "@radix-ui/themes";
 
 export default function Navbar() {

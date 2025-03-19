@@ -2,8 +2,7 @@ import {
     doc,
     setDoc,
     getDoc,
-    updateDoc,
-    serverTimestamp
+    updateDoc
 } from 'firebase/firestore';
 import { db } from './firebase.config';
 import { User } from 'firebase/auth';
@@ -28,7 +27,7 @@ export interface UserData {
 export const createUserDocument = async (
     user: User,
     role: UserRole = 'student',
-    additionalData: Record<string, any> = {}
+    additionalData: Partial<UserData> = {}
 ): Promise<UserData> => {
     if (!user) throw new Error('No user provided');
 

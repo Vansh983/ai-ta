@@ -3,7 +3,8 @@ import {
     signInWithEmailAndPassword,
     signOut as firebaseSignOut,
     onAuthStateChanged,
-    type User
+    type User,
+    AuthError
 } from 'firebase/auth';
 import { auth } from './firebase.config';
 
@@ -21,8 +22,11 @@ export const signUp = async (email: string, password: string) => {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await setSessionCookie(userCredential.user);
         return userCredential.user;
-    } catch (error: any) {
-        throw new Error(getAuthErrorMessage(error.code));
+    } catch (error: unknown) {
+        if (error instanceof Error && 'code' in error) {
+            throw new Error(getAuthErrorMessage((error as AuthError).code));
+        }
+        throw error;
     }
 };
 
@@ -31,8 +35,11 @@ export const signIn = async (email: string, password: string) => {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         await setSessionCookie(userCredential.user);
         return userCredential.user;
-    } catch (error: any) {
-        throw new Error(getAuthErrorMessage(error.code));
+    } catch (error: unknown) {
+        if (error instanceof Error && 'code' in error) {
+            throw new Error(getAuthErrorMessage((error as AuthError).code));
+        }
+        throw error;
     }
 };
 
@@ -40,8 +47,11 @@ export const signOut = async () => {
     try {
         await firebaseSignOut(auth);
         clearSessionCookie();
-    } catch (error: any) {
-        throw new Error(getAuthErrorMessage(error.code));
+    } catch (error: unknown) {
+        if (error instanceof Error && 'code' in error) {
+            throw new Error(getAuthErrorMessage((error as AuthError).code));
+        }
+        throw error;
     }
 };
 

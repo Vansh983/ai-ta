@@ -6,7 +6,6 @@ import {
     getDocs,
     query,
     where,
-    deleteDoc,
     updateDoc,
     orderBy
 } from 'firebase/firestore';
@@ -176,7 +175,6 @@ export const uploadDocument = async (file: File, courseId: string, userId: strin
 
     const timestamp = new Date();
     // Create a clean filename with timestamp to avoid collisions
-    const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'pdf';
     const safeFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
     // Store files directly in courses bucket
     const storagePath = `courses/${courseId}/${safeFileName}`;

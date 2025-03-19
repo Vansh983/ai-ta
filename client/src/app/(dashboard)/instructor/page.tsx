@@ -162,19 +162,6 @@ export default function InstructorDashboard() {
         setPendingDocuments(prev => prev.filter(doc => doc.name !== fileName));
     };
 
-    const handleDocumentUpload = (courseId: string, document: Document) => {
-        setCourses(courses.map(course => {
-            if (course.id === courseId) {
-                return {
-                    ...course,
-                    documents: [...course.documents, document],
-                    updatedAt: new Date()
-                };
-            }
-            return course;
-        }));
-    };
-
     const handleCourseSelect = (course: Course) => {
         setCurrentCourseId(course.id);
         setCourseName(course.name);

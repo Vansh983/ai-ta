@@ -1,9 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import SignIn from '@/components/auth/SignIn';
-import { Box, Text, Link as RadixLink } from '@radix-ui/themes';
 
 export default function SignInPage() {
     const router = useRouter();
