@@ -383,8 +383,8 @@ export default function InstructorDashboard() {
                                         <div
                                             key={course.id}
                                             className={`p-4 rounded-lg border cursor-pointer transition-colors relative group ${currentCourseId === course.id
-                                                    ? 'bg-[#19C37D]/10 border-[#19C37D]'
-                                                    : 'bg-[#343541] border-gray-700 hover:border-gray-600'
+                                                ? 'bg-[#19C37D]/10 border-[#19C37D]'
+                                                : 'bg-[#343541] border-gray-700 hover:border-gray-600'
                                                 }`}
                                             onClick={() => handleCourseSelect(course)}
                                         >

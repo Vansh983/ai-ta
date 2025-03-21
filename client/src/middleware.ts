@@ -32,12 +32,8 @@ export function middleware(request: NextRequest) {
             return NextResponse.redirect(new URL('/', request.url))
         }
 
-        if (request.nextUrl.pathname.startsWith('/student') &&
-            userToken.role !== 'student' &&
-            userToken.role !== 'admin') {
-            // Not a student or admin, redirect to home
-            return NextResponse.redirect(new URL('/', request.url))
-        }
+        // For student routes, we only check if user exists (no role check)
+        // The role check is removed since instructors can access student routes
     }
 
     return NextResponse.next()
