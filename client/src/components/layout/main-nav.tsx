@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/firebase.config";
@@ -27,6 +27,7 @@ export function MainNav() {
     const { user, loading: authLoading, signOut } = useAuth();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const router = useRouter();
     const currentCourseId = searchParams.get('course');
 
     const [courses, setCourses] = useState<Course[]>([]);
@@ -64,6 +65,7 @@ export function MainNav() {
     const handleSignOut = async () => {
         try {
             await signOut();
+            router.push('/');
         } catch (error) {
             console.error('Failed to sign out:', error);
         }

@@ -26,6 +26,13 @@ export function BaseLayout({ children }: BaseLayoutProps) {
                     <main className="flex-1 overflow-auto">
                         {children}
                     </main>
+                    <footer className="p-4 bottom-0 fixed w-full left-64">
+                        <p className="text-sm text-gray-400">
+                            Being developed by Vansh
+                        </p>
+                    </footer>
+
+                    {/* Footer */}
                 </div>
             </AuthProvider>
         </ThemeProvider>
