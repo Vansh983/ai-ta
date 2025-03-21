@@ -17,7 +17,9 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=[
+        "http://localhost:3000",
+    ],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,6 +106,8 @@ async def refresh_course(request: RefreshCourseRequest) -> dict:
     """
     Refreshes the RAG index for a specific course by reprocessing all its files
     """
+
+    print(f"Refreshing course {request.courseId}")
     # Validate request data
     if not request.courseId:
         raise HTTPException(status_code=400, detail="courseId is required")
@@ -343,6 +347,11 @@ async def get_chat_history(
     except Exception as e:
         print(f"Error retrieving chat history: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/")
+async def root():
+    return {"message": "Hello from Vansh"}
 
 
 if __name__ == "__main__":

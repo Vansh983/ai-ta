@@ -1,4 +1,3 @@
-import { Box, Container, Flex, Text } from "@radix-ui/themes";
 import { type ReactNode } from "react";
 import { ThemeProvider } from "../providers/theme-provider";
 import { MainNav } from "./main-nav";
@@ -12,23 +11,31 @@ export function BaseLayout({ children }: BaseLayoutProps) {
     return (
         <ThemeProvider>
             <AuthProvider>
-                <Flex direction="column" style={{ minHeight: "100vh" }}>
-                    <MainNav />
-                    <Box style={{ flex: 1 }}>
-                        <Container size="4" py="6">
+                <div className="flex min-h-screen bg-[#343541]">
+                    {/* Sidebar */}
+                    <div className="w-64 bg-[#202123] text-white flex flex-col">
+                        <div className="p-4 border-b border-gray-700">
+                            <h2 className="text-lg font-medium">AI Teaching Assistant</h2>
+                        </div>
+                        <MainNav />
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="flex-1 flex flex-col">
+                        <main className="flex-1 relative">
                             {children}
-                        </Container>
-                    </Box>
-                    <Box py="6" style={{ backgroundColor: "var(--gray-2)", borderTop: "1px solid var(--gray-4)" }}>
-                        <Container size="4">
-                            <Flex justify="between" align="center">
-                                <Text size="2" color="gray">
+                        </main>
+
+                        {/* Footer */}
+                        <footer className="p-4 border-t border-gray-700">
+                            <div className="max-w-7xl mx-auto">
+                                <p className="text-sm text-gray-400">
                                     Being developed by Vansh
-                                </Text>
-                            </Flex>
-                        </Container>
-                    </Box>
-                </Flex>
+                                </p>
+                            </div>
+                        </footer>
+                    </div>
+                </div>
             </AuthProvider>
         </ThemeProvider>
     );
