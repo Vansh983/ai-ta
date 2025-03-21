@@ -7,7 +7,8 @@ import {
     query,
     where,
     updateDoc,
-    orderBy
+    orderBy,
+    deleteDoc
 } from 'firebase/firestore';
 import {
     ref,
@@ -309,4 +310,17 @@ export const getCoursesByTerm = async (term: string, year: number, userId: strin
     );
     const coursesSnap = await getDocs(q);
     return coursesSnap.docs.map(doc => doc.data() as Course);
+};
+
+export const deleteCourse = async (courseId: string, userId: string) => {
+    const course = await getCourse(courseId);
+
+    // Verify user has access to delete the course
+    if (course.userId !== userId) {
+        throw new Error('Unauthorized to delete this course');
+    }
+
+    // Delete all documents associated with the course
+    const courseRef = doc(db, 'courses', courseId);
+    await deleteDoc(courseRef);
 }; 
