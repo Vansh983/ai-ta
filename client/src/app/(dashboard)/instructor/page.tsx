@@ -198,216 +198,182 @@ export default function InstructorDashboard() {
     return (
         <RequireAuth allowedRoles={['instructor', 'admin']}>
             <div className="container py-8">
-                <h1 className="text-3xl font-bold mb-8">Instructor Dashboard</h1>
+                <h1 className="text-3xl font-bold mb-8 text-white">New Course</h1>
 
                 {error && (
-                    <div className="mb-8 p-4 bg-red-100 text-red-700 rounded-md">
+                    <div className="mb-8 p-4 bg-red-900/50 text-red-200 rounded-md border border-red-800">
                         {error}
                     </div>
                 )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="space-y-8">
-                        <div className="p-6 bg-card rounded-lg shadow">
-                            <h2 className="text-xl font-semibold mb-4">
+                        <div className="p-6 bg-[#444654] rounded-lg border border-gray-700 shadow-lg">
+                            <h2 className="text-xl font-semibold mb-4 text-white">
                                 {currentCourseId ? "Update Course" : "Create New Course"}
                             </h2>
                             <form onSubmit={handleCreateOrUpdateCourse} className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">
                                         Course Name
                                     </label>
                                     <input
                                         type="text"
                                         value={courseName}
                                         onChange={(e) => setCourseName(e.target.value)}
-                                        className="w-full p-2 border rounded-md"
+                                        className="w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent"
                                         required
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">
                                         Course Code
                                     </label>
                                     <input
                                         type="text"
                                         value={courseCode}
                                         onChange={(e) => setCourseCode(e.target.value)}
-                                        className="w-full p-2 border rounded-md"
+                                        className="w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent"
                                         placeholder="e.g., CSCI3120"
                                         required
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">
                                         Faculty
                                     </label>
                                     <input
                                         type="text"
                                         value={courseFaculty}
                                         onChange={(e) => setCourseFaculty(e.target.value)}
-                                        className="w-full p-2 border rounded-md"
-                                        placeholder="e.g., Computer Science"
+                                        className="w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent"
                                         required
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">
-                                            Term
-                                        </label>
-                                        <select
-                                            value={courseTerm}
-                                            onChange={(e) => setCourseTerm(e.target.value as 'Fall' | 'Winter' | 'Summer')}
-                                            className="w-full p-2 border rounded-md"
-                                            required
-                                        >
-                                            <option value="Fall">Fall</option>
-                                            <option value="Winter">Winter</option>
-                                            <option value="Summer">Summer</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">
-                                            Year
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={courseYear}
-                                            onChange={(e) => setCourseYear(parseInt(e.target.value))}
-                                            className="w-full p-2 border rounded-md"
-                                            min={2000}
-                                            max={2100}
-                                            required
-                                        />
-                                    </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">
+                                        Term
+                                    </label>
+                                    <select
+                                        value={courseTerm}
+                                        onChange={(e) => setCourseTerm(e.target.value as 'Fall' | 'Winter' | 'Summer')}
+                                        className="w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent"
+                                    >
+                                        <option value="Fall">Fall</option>
+                                        <option value="Winter">Winter</option>
+                                        <option value="Summer">Summer</option>
+                                    </select>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">
-                                        Course Description
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">
+                                        Year
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={courseYear}
+                                        onChange={(e) => setCourseYear(parseInt(e.target.value))}
+                                        className="w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1 text-gray-300">
+                                        Description
                                     </label>
                                     <textarea
                                         value={courseDescription}
                                         onChange={(e) => setCourseDescription(e.target.value)}
-                                        className="w-full p-2 border rounded-md"
-                                        rows={3}
+                                        className="w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent min-h-[100px]"
                                         required
                                     />
                                 </div>
 
-                                <div className="mt-6">
-                                    <h3 className="text-lg font-medium mb-2">Upload Course Materials</h3>
-                                    <div className="mb-4">
-                                        <DocumentUpload
-                                            courseId={null}
-                                            userId={user?.uid || ""}
-                                            onUploadComplete={(file) => handlePendingDocumentUpload(file as unknown as File)}
-                                            isPending={true}
-                                        />
-                                    </div>
-                                    {pendingDocuments.length > 0 && (
-                                        <div className="mt-4">
-                                            <h4 className="font-medium mb-2">Pending Uploads:</h4>
-                                            <ul className="space-y-2">
-                                                {pendingDocuments.map((doc) => (
-                                                    <li key={doc.name} className="flex items-center justify-between">
-                                                        <span>{doc.name}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemovePendingDocument(doc.name)}
-                                                            className="text-red-600 hover:text-red-800"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </div>
-
                                 <div className="flex gap-4">
-                                    <Button type="submit" disabled={uploadingDocuments}>
-                                        {uploadingDocuments
-                                            ? "Saving..."
-                                            : currentCourseId
-                                                ? "Update Course"
-                                                : "Create Course"
-                                        }
+                                    <Button
+                                        type="submit"
+                                        className="flex-1 bg-[#19C37D] hover:bg-[#15A36B] text-white"
+                                        disabled={uploadingDocuments}
+                                    >
+                                        {uploadingDocuments ? "Saving..." : currentCourseId ? "Update Course" : "Create Course"}
                                     </Button>
                                     {currentCourseId && (
                                         <Button
                                             type="button"
                                             variant="outline"
                                             onClick={handleCancelEdit}
+                                            className="flex-1 border-gray-700 text-gray-300 hover:bg-gray-700"
                                         >
-                                            Cancel Edit
+                                            Cancel
                                         </Button>
                                     )}
                                 </div>
                             </form>
                         </div>
-
-
                     </div>
 
-                    <div className="p-6 bg-card rounded-lg shadow">
-                        <h2 className="text-xl font-semibold mb-4">Your Courses</h2>
-                        {loading ? (
-                            <div className="text-center py-8">
-                                <p className="text-muted-foreground">Loading courses...</p>
-                            </div>
-                        ) : courses.length === 0 ? (
-                            <p className="text-muted-foreground">No courses created yet.</p>
-                        ) : (
-                            <div className="space-y-6">
-                                {courses.map((course) => (
-                                    <div
-                                        key={course.id}
-                                        className="p-4 border rounded-md hover:bg-accent/50 transition-colors"
-                                    >
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div>
-                                                <h3 className="font-medium">{course.name}</h3>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {course.code} • {course.faculty} • {course.term} {course.year}
-                                                </p>
-                                            </div>
-                                            <Button
-                                                variant="secondary" size="sm"
-                                                onClick={() => handleCourseSelect(course)}
-                                            >
-                                                Edit Course
-                                            </Button>
+                    <div className="space-y-8">
+                        <div className="p-6 bg-[#444654] rounded-lg border border-gray-700 shadow-lg">
+                            <h2 className="text-xl font-semibold mb-4 text-white">Course Documents</h2>
+                            <DocumentUpload
+                                courseId={null}
+                                userId={user?.uid || ""}
+                                onUploadComplete={(file) => handlePendingDocumentUpload(file as unknown as File)}
+                                isPending={true}
+                            />
+                            {pendingDocuments.length > 0 && (
+                                <div className="mt-4">
+                                    <h4 className="font-medium mb-2 text-gray-300">Pending Uploads:</h4>
+                                    <ul className="space-y-2">
+                                        {pendingDocuments.map((doc) => (
+                                            <li key={doc.name} className="flex items-center justify-between text-gray-300">
+                                                <span>{doc.name}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemovePendingDocument(doc.name)}
+                                                    className="text-red-400 hover:text-red-300"
+                                                >
+                                                    Remove
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-6 bg-[#444654] rounded-lg border border-gray-700 shadow-lg">
+                            <h2 className="text-xl font-semibold mb-4 text-white">Your Courses</h2>
+                            {loading ? (
+                                <p className="text-gray-300">Loading courses...</p>
+                            ) : courses.length === 0 ? (
+                                <p className="text-gray-300">No courses found. Create one above!</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {courses.map((course) => (
+                                        <div
+                                            key={course.id}
+                                            className={`p-4 rounded-lg border cursor-pointer transition-colors ${currentCourseId === course.id
+                                                    ? 'bg-[#19C37D]/10 border-[#19C37D]'
+                                                    : 'bg-[#343541] border-gray-700 hover:border-gray-600'
+                                                }`}
+                                            onClick={() => handleCourseSelect(course)}
+                                        >
+                                            <h3 className="font-semibold text-white">{course.name}</h3>
+                                            <p className="text-sm text-gray-300">{course.code}</p>
+                                            <p className="text-sm text-gray-400">
+                                                {course.term} {course.year}
+                                            </p>
+                                            <p className="text-sm text-gray-400 mt-2">{course.faculty}</p>
                                         </div>
-                                        <p className="text-sm text-muted-foreground mb-4">
-                                            {course.description}
-                                        </p>
-                                        <div className="text-sm">
-                                            <h4 className="font-medium mb-2">Course Materials ({course.documents.length})</h4>
-                                            {course.documents.length === 0 ? (
-                                                <p className="text-muted-foreground">No documents uploaded yet</p>
-                                            ) : (
-                                                <ul className="list-disc pl-5 space-y-1">
-                                                    {course.documents.map((doc) => (
-                                                        <li key={doc.id}>
-                                                            <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                                                {doc.name}
-                                                            </a>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

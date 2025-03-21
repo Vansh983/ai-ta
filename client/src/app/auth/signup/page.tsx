@@ -10,7 +10,8 @@ export default function SignUpPage() {
 
     return (
         <Container size="2" className="py-10">
-            <SignUp onSignUp={() => router.push('/')} />
+            <Text size="6" color="green">Contact me at vanshsood@dal.ca for access to the platform</Text>
+            {/* <SignUp onSignUp={() => router.push('/')} />
 
             <Box className="mt-6 text-center">
                 <Text size="2" color="gray">
@@ -19,7 +20,7 @@ export default function SignUpPage() {
                         <RadixLink>Sign in</RadixLink>
                     </Link>
                 </Text>
-            </Box>
+            </Box> */}
         </Container>
     );
 } 

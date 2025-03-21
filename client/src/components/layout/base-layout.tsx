@@ -11,30 +11,21 @@ export function BaseLayout({ children }: BaseLayoutProps) {
     return (
         <ThemeProvider>
             <AuthProvider>
-                <div className="flex min-h-screen bg-[#343541]">
-                    {/* Sidebar */}
-                    <div className="w-64 bg-[#202123] text-white flex flex-col">
-                        <div className="p-4 border-b border-gray-700">
-                            <h2 className="text-lg font-medium">AI Teaching Assistant</h2>
-                        </div>
-                        <MainNav />
-                    </div>
-
-                    {/* Main Content */}
-                    <div className="flex-1 flex flex-col">
-                        <main className="flex-1 relative">
-                            {children}
-                        </main>
-
-                        {/* Footer */}
-                        <footer className="p-4 border-t border-gray-700">
-                            <div className="max-w-7xl mx-auto">
-                                <p className="text-sm text-gray-400">
-                                    Being developed by Vansh
-                                </p>
+                <div className="flex h-screen overflow-hidden bg-[#343541]">
+                    {/* Fixed Sidebar */}
+                    <div className="w-64 flex-shrink-0 bg-[#202123] border-r border-gray-700">
+                        <div className="h-screen flex flex-col">
+                            <div className="p-4 border-b border-gray-700">
+                                <h2 className="text-lg font-medium text-white">AI Teaching Assistant</h2>
                             </div>
-                        </footer>
+                            <MainNav />
+                        </div>
                     </div>
+
+                    {/* Scrollable Main Content */}
+                    <main className="flex-1 overflow-auto">
+                        {children}
+                    </main>
                 </div>
             </AuthProvider>
         </ThemeProvider>

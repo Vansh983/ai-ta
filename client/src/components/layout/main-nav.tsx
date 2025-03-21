@@ -24,7 +24,7 @@ interface Course {
 }
 
 export function MainNav() {
-    const { user, userRole, loading: authLoading, signOut } = useAuth();
+    const { user, loading: authLoading, signOut } = useAuth();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const currentCourseId = searchParams.get('course');
@@ -57,7 +57,6 @@ export function MainNav() {
         };
 
         if (!authLoading) {
-            console.log('Auth state:', { user, userRole, authLoading });
             fetchCourses();
         }
     }, [authLoading]);
@@ -71,16 +70,15 @@ export function MainNav() {
     };
 
     const showCourseList = !authLoading && user;
-    console.log('Show course list:', { showCourseList, authLoading, user, userRole });
 
-    const showInstructorDashboard = !authLoading && user && userRole === 'instructor';
+    const showInstructorDashboard = !authLoading && user && user.role === 'instructor';
 
     return (
-        <div className="flex-1 flex flex-col">
-            {/* Navigation Links */}
-            <nav className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Navigation Links - Scrollable */}
+            <nav className="flex-1 overflow-y-auto px-2 py-4">
                 {showCourseList ? (
-                    <div className="px-2 py-4">
+                    <div>
                         <h3 className="px-3 mb-2 text-xs font-medium text-gray-400 uppercase">Available Courses</h3>
                         {loading ? (
                             <div className="flex items-center justify-center p-4">
@@ -114,35 +112,33 @@ export function MainNav() {
                         )}
                     </div>
                 ) : (
-                    <div className="px-2 py-4">
+                    <div>
                         <p className="text-center text-gray-400 p-4">
                             {authLoading ? "Loading..." : !user ? "Please sign in" : "Not a student"}
                         </p>
                     </div>
                 )}
 
-                {showInstructorDashboard && (
-                    <div className="px-2 py-4">
-                        <Link
-                            href="/instructor"
-                            className={`block px-3 py-2 rounded-lg text-sm ${pathname === "/instructor"
-                                ? "bg-[#343541] text-white"
-                                : "text-gray-300 hover:bg-[#2A2B32]"
-                                }`}
-                        >
-                            Instructor Dashboard
-                        </Link>
-                    </div>
-                )}
+
             </nav>
 
-            {/* User Section */}
-            <div className="p-4 border-t border-gray-700">
+            {showInstructorDashboard && (
+                <Link
+                    href="/instructor"
+                    className={`block px-3 py-2 rounded-lg text-sm bg-white mx-4 mb-4`}
+                >
+                    Create New Course
+                </Link>
+            )}
+
+            {/* User Section - Fixed at bottom */}
+            <div className="flex-shrink-0 p-4 border-t border-gray-700">
+
                 {user ? (
                     <div className="space-y-3">
                         <p className="text-sm text-gray-400 truncate">
                             {user.email}
-                            <span className="block text-xs opacity-70">({userRole})</span>
+                            <span className="block text-xs opacity-70">({user.role})</span>
                         </p>
                         <button
                             onClick={handleSignOut}

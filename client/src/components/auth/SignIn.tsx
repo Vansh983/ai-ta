@@ -68,7 +68,7 @@ export default function SignIn({ onSignIn }: SignInProps) {
             <div className="mt-8 text-center">
                 <p className="text-gray-400">
                     Don't have an account?{' '}
-                    <Link href="/signup" className="text-[#19C37D] hover:text-[#15A36B]">
+                    <Link href="/auth/signup" className="text-[#19C37D] hover:text-[#15A36B]">
                         Sign up
                     </Link>
                 </p>
