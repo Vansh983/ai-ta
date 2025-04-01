@@ -4,9 +4,9 @@ from pydantic import BaseModel
 import uvicorn
 import shutil
 import os
-from ingestion import ingest_document
-from chat import generate_answer
-from firebase_utils import download_file_from_firebase, get_course_files, db
+from src.ingestion import ingest_document
+from src.chat import generate_answer
+from src.firebase_utils import download_file_from_firebase, get_course_files, db
 import faiss
 import numpy as np
 from datetime import datetime, timezone

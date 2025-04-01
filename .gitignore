@@ -3,6 +3,7 @@
 
 server/venv/
 server/.env
+server/secrets
 
 server/service_account.json
 server/__pycache__
