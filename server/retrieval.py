@@ -7,7 +7,7 @@ from typing import List
 openai.api_key = OPENAI_API_KEY
 
 
-def get_embedding(text: str, model: str = "text-embedding-ada-002") -> List[float]:
+def get_embedding(text: str, model: str = "text-embedding-3-large") -> List[float]:
     response = openai.Embedding.create(input=text, model=model)
     embedding = response["data"][0]["embedding"]
     return embedding

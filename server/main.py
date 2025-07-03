@@ -17,7 +17,10 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=[
+        "http://localhost:3000",
+        "https://ai-ta.vercel.app",
+    ], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,6 +85,9 @@ def load_course_content(courseId: str) -> Tuple[faiss.Index, List[str]]:
             all_chunks.extend(chunks)
             all_embeddings.append(embeddings)
 
+        except ValueError as e:
+            print(f"Skipping file {file_path} due to ingestion error: {str(e)}")
+            continue
         except Exception as e:
             print(f"Error processing file {file_path}: {str(e)}")
             continue
@@ -344,6 +350,9 @@ async def get_chat_history(
         print(f"Error retrieving chat history: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/")
+async def root():
+    return {"message": "Hello from Vansh"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
