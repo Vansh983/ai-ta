@@ -8,16 +8,16 @@ fi
 
 # Check if OPENAI_API_KEY is set
 if [ -z "$OPENAI_API_KEY" ]; then
-  if [ -f "secrets/.env" ]; then
-    export $(grep -v '^#' secrets/.env | xargs)
+  if [ -f ".env" ]; then
+    export $(grep -v '^#' .env | xargs)
     if [ -z "$OPENAI_API_KEY" ]; then
-      echo "Warning: OPENAI_API_KEY is not set in secrets/.env"
+      echo "Warning: OPENAI_API_KEY is not set in .env"
       echo "The application may not work correctly without an OpenAI API key."
     else
-      echo "Using OPENAI_API_KEY from secrets/.env"
+      echo "Using OPENAI_API_KEY from .env"
     fi
   else
-    echo "Warning: OPENAI_API_KEY is not set and secrets/.env does not exist."
+    echo "Warning: OPENAI_API_KEY is not set and .env does not exist."
     echo "The application may not work correctly without an OpenAI API key."
   fi
 fi
@@ -25,18 +25,6 @@ fi
 # Create uploads directory structure
 mkdir -p uploads/courses
 echo "Created uploads directory structure"
-
-# Check if PostgreSQL container is running
-if ! docker ps | grep -q ai-ta-postgres; then
-  echo "Starting PostgreSQL container..."
-  docker-compose -f docker/docker-compose.yml up -d postgres
-  
-  # Wait for PostgreSQL to start
-  echo "Waiting for PostgreSQL to start..."
-  sleep 5
-else
-  echo "PostgreSQL container is already running"
-fi
 
 # Check if Python dependencies are installed
 if ! command -v uvicorn > /dev/null 2>&1; then
