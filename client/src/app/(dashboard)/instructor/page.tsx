@@ -187,6 +187,31 @@ export default function InstructorDashboard() {
         setPendingDocuments([]);
     };
 
+    const handleCourseSelect = (course: Course) => {
+        setCurrentCourseId(course.id);
+        setCourseName(course.name);
+        setCourseCode(course.code);
+        setCourseFaculty(course.faculty);
+        setCourseTerm(course.term);
+        setCourseYear(course.year);
+        setCourseDescription(course.description);
+        // Clear any pending documents
+        setPendingDocuments([]);
+        // Scroll to the form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelEdit = () => {
+        setCurrentCourseId(null);
+        setCourseName("");
+        setCourseCode("");
+        setCourseFaculty("");
+        setCourseTerm('Fall');
+        setCourseYear(new Date().getFullYear());
+        setCourseDescription("");
+        setPendingDocuments([]);
+    };
+
     if (!user) {
         return (
             <div className="container py-8">

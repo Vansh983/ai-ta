@@ -6,7 +6,6 @@ export interface AuthUser {
     email: string;
     displayName: string;
     role: 'student' | 'instructor' | 'admin';
-    photoURL: string;
 }
 
 export type Role = AuthUser['role'];
@@ -58,8 +57,7 @@ export const signIn = async (token: string): Promise<AuthUser> => {
         uid: userToken.userId, // Set uid as alias for userId
         email: userToken.email,
         displayName: userToken.displayName,
-        role: userToken.role,
-        photoURL: userToken.photoURL || ''
+        role: userToken.role
     };
 };
 
@@ -83,6 +81,5 @@ export const getCurrentUser = (): AuthUser | null => {
         email: userToken.email,
         displayName: userToken.displayName,
         role: userToken.role,
-        photoURL: userToken.photoURL || ''
     };
 }; 
