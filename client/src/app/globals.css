@@ -4,20 +4,34 @@
 
 :root {
   --background: #343541;
-  --foreground: #ECECF1;
+  --foreground: #ececf1;
+
+  /* Chart colors for shadcn charts */
+  --chart-1: 25 195 125; /* #19C37D - your brand green */
+  --chart-2: 59 130 246; /* #3B82F6 - blue */
+  --chart-3: 139 92 246; /* #8B5CF6 - purple */
+  --chart-4: 245 158 11; /* #F59E0B - amber */
+  --chart-5: 239 68 68; /* #EF4444 - red */
+
+  /* Card colors for shadcn components */
+  --card: 52 53 65; /* #343541 - matches your background */
+  --card-foreground: 236 236 241; /* #ECECF1 - matches your foreground */
+  --muted: 86 88 105; /* #565869 - muted text */
+  --muted-foreground: 156 163 175; /* #9CA3AF - muted foreground */
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #343541;
-    --foreground: #ECECF1;
+    --foreground: #ececf1;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: "Söhne", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  font-family: "Söhne", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
 }
 
 /* ChatGPT-like scrollbar */
