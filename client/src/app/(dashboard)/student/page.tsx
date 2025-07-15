@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase/firebase.config";
 import { sendMessage, refreshCourse, type ChatMessage, storeMessage, getChatHistory } from "@/lib/services/chat";
 import { toast } from "sonner";
 import { auth } from "@/lib/firebase/firebase.config";
+import { useSearchParams } from "next/navigation";
 
 interface Course {
     id: string;
@@ -23,6 +24,9 @@ interface Course {
 }
 
 export default function StudentDashboard() {
+    const searchParams = useSearchParams();
+    const courseId = searchParams.get('course');
+
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
     const [courses, setCourses] = useState<Course[]>([]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -36,6 +40,7 @@ export default function StudentDashboard() {
         "What are the learning objectives of this course?",
     ]);
 
+    // Fetch courses
     useEffect(() => {
         const fetchCourses = async () => {
             try {
@@ -49,6 +54,14 @@ export default function StudentDashboard() {
                 })) as Course[];
 
                 setCourses(coursesData);
+
+                // If we have a courseId in URL, select that course
+                if (courseId) {
+                    const course = coursesData.find(c => c.id === courseId);
+                    if (course) {
+                        setSelectedCourse(course);
+                    }
+                }
             } catch (error) {
                 console.error("Error fetching courses:", error);
                 toast.error("Failed to fetch courses");
@@ -58,13 +71,13 @@ export default function StudentDashboard() {
         };
 
         fetchCourses();
-    }, []);
+    }, [courseId]);
 
+    // Load chat history when course changes
     useEffect(() => {
         const loadChatHistory = async () => {
             if (!selectedCourse) return;
 
-            // Get user ID if authenticated, otherwise use a guest ID
             const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
 
             setLoadingChat(true);
@@ -83,18 +96,20 @@ export default function StudentDashboard() {
             }
         };
 
-        loadChatHistory();
+        if (selectedCourse) {
+            loadChatHistory();
+        } else {
+            setMessages([]);
+        }
     }, [selectedCourse]);
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedCourse || !newMessage.trim() || sendingMessage) return;
 
-        // Get user ID if authenticated, otherwise use a guest ID
         const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
+        const courseId = selectedCourse?.id;
 
-        // Validate data before creating message object
-        const courseId = selectedCourse?.id || "";
         if (!courseId) {
             toast.error("No course selected");
             return;
@@ -120,22 +135,13 @@ export default function StudentDashboard() {
         setSendingMessage(true);
 
         try {
-            // Store user message in Firebase
             await storeMessage(userMessage);
+            const response = await sendMessage(courseId, messageContent, userId);
 
-            // Send message to backend
-            const response = await sendMessage(
-                courseId,
-                messageContent,
-                userId
-            );
-
-            // Validate response
             if (!response || !response.answer) {
                 throw new Error("Invalid response from server");
             }
 
-            // Create AI message
             const aiMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
                 content: response.answer,
@@ -145,10 +151,7 @@ export default function StudentDashboard() {
                 userId: userId,
             };
 
-            // Store AI message in Firebase
             await storeMessage(aiMessage);
-
-            // Update UI
             setMessages(prev => [...prev, aiMessage]);
         } catch (error) {
             console.error("Error sending message:", error);
@@ -158,139 +161,99 @@ export default function StudentDashboard() {
         }
     };
 
-    const handleCourseSelect = async (course: Course) => {
-        setSelectedCourse(course);
-        setMessages([]); // Clear messages when switching courses
-
-        // Get user ID if authenticated, otherwise use a guest ID
-        const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
-
-        try {
-            // Refresh the course content when selected
-            await refreshCourse(course.id, userId);
-            toast.success("Course content refreshed");
-        } catch (error) {
-            console.error("Error refreshing course:", error);
-            toast.error("Failed to refresh course content");
-        }
-    };
-
     const handleQuestionSelect = (question: string) => {
         setNewMessage(question);
     };
 
+    if (loading) {
+        return (
+            <div className="h-full flex items-center justify-center bg-[#343541]">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+            </div>
+        );
+    }
+
     return (
-        <div className="container py-8">
-            <h1 className="text-3xl font-bold mb-8">Student Dashboard</h1>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="md:col-span-1">
-                    <div className="p-6 bg-card rounded-lg shadow">
-                        <h2 className="text-xl font-semibold mb-4">Available Courses</h2>
-                        {loading ? (
-                            <div className="flex items-center justify-center p-4">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                            </div>
-                        ) : courses.length > 0 ? (
-                            <div className="space-y-4">
-                                {courses.map((course) => (
-                                    <button
-                                        key={course.id}
-                                        onClick={() => handleCourseSelect(course)}
-                                        className={`w-full p-4 text-left rounded-lg transition-colors ${selectedCourse?.id === course.id
-                                            ? "bg-primary text-primary-foreground"
-                                            : "bg-card hover:bg-accent/50"
-                                            }`}
-                                    >
-                                        <h3 className="font-medium">{course.name}</h3>
-                                        <p className="text-sm opacity-80">
-                                            {course.code} • {course.term} {course.year}
-                                        </p>
-                                    </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-center text-muted-foreground">
-                                No courses available
-                            </p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="md:col-span-2">
-                    {selectedCourse ? (
-                        <div className="p-6 bg-card rounded-lg shadow h-[600px] flex flex-col">
-                            <div className="border-b pb-4 mb-4">
-                                <h2 className="text-xl font-semibold">{selectedCourse.name}</h2>
-                                <p className="text-sm text-muted-foreground">
+        <div className="h-full flex flex-col bg-[#343541]">
+            {selectedCourse ? (
+                <>
+                    <div className="flex-1 overflow-y-auto">
+                        <div className="max-w-3xl mx-auto py-4 px-6">
+                            {/* Course Info */}
+                            <div className="mb-8 text-center">
+                                <h2 className="text-xl font-semibold text-white mb-2">{selectedCourse.name}</h2>
+                                <p className="text-sm text-gray-300">
                                     {selectedCourse.description}
                                 </p>
-                                <div className="mt-4 space-y-2">
-                                    <p className="text-sm font-medium">Sample Questions:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {sampleQuestions.map((question, index) => (
-                                            <button
-                                                key={index}
-                                                onClick={() => handleQuestionSelect(question)}
-                                                className="text-sm px-3 py-1.5 bg-accent hover:bg-accent/80 rounded-full transition-colors"
-                                            >
-                                                {question}
-                                            </button>
-                                        ))}
-                                    </div>
+                                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                                    {sampleQuestions.map((question, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => handleQuestionSelect(question)}
+                                            className="text-sm px-3 py-1.5 bg-[#40414F] text-gray-300 hover:bg-[#202123] rounded-full transition-colors"
+                                        >
+                                            {question}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto mb-4 space-y-4">
-                                {loadingChat ? (
-                                    <div className="flex items-center justify-center h-full">
-                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                                    </div>
-                                ) : (
-                                    messages.map((message) => (
+                            {/* Messages */}
+                            {loadingChat ? (
+                                <div className="flex items-center justify-center h-full">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {messages.map((message) => (
                                         <div
                                             key={message.id}
-                                            className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
+                                            className={`flex ${message.sender === "user" ? "bg-[#343541]" : "bg-[#444654]"}`}
                                         >
-                                            <div
-                                                className={`max-w-[80%] p-3 rounded-lg ${message.sender === "user"
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted"
-                                                    }`}
-                                            >
-                                                <p>{message.content}</p>
-                                                <span className="text-xs opacity-70">
-                                                    {message.timestamp.toLocaleTimeString()}
-                                                </span>
+                                            <div className="max-w-3xl mx-auto w-full px-4 py-6">
+                                                <div className="flex gap-4 items-start">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${message.sender === "user" ? "bg-[#5436DA]" : "bg-[#19C37D]"
+                                                        }`}>
+                                                        {message.sender === "user" ? "U" : "AI"}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-white whitespace-pre-wrap">{message.content}</p>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
 
-                            <form onSubmit={handleSendMessage} className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    placeholder="Type your message..."
-                                    className="flex-1 p-2 border rounded-md"
-                                    disabled={sendingMessage}
-                                />
-                                <Button type="submit" disabled={sendingMessage}>
-                                    {sendingMessage ? "Sending..." : "Send"}
-                                </Button>
-                            </form>
-                        </div>
-                    ) : (
-                        <div className="p-6 bg-card rounded-lg shadow h-[600px] flex items-center justify-center">
-                            <p className="text-muted-foreground">
-                                Select a course to start chatting
-                            </p>
-                        </div>
-                    )}
+                    {/* Input Area */}
+                    <div className="border-t border-gray-700 bg-[#343541] p-4">
+                        <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto relative">
+                            <input
+                                type="text"
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                placeholder="Message your AI teaching assistant..."
+                                className="w-full p-4 pr-24 bg-[#40414F] text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-[#19C37D]"
+                                disabled={sendingMessage}
+                            />
+                            <Button
+                                type="submit"
+                                disabled={sendingMessage}
+                                className="absolute right-2 top-2 bg-[#19C37D] text-white hover:bg-[#15A36B] disabled:bg-[#40414F]"
+                            >
+                                {sendingMessage ? "Sending..." : "Send"}
+                            </Button>
+                        </form>
+                    </div>
+                </>
+            ) : (
+                <div className="flex-1 flex items-center justify-center text-gray-300">
+                    <p>Select a course from the sidebar to start chatting</p>
                 </div>
-            </div>
+            )}
         </div>
     );
 } 

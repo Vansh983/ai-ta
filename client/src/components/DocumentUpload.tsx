@@ -88,25 +88,25 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete, isP
     };
 
     return (
-        <div className="max-w-xl mx-auto p-6">
+        <div className="max-w-xl mx-auto">
             <div
                 onDragEnter={handleDragIn}
                 onDragLeave={handleDragOut}
                 onDragOver={handleDrag}
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-lg p-8 text-center ${dragging
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 hover:border-blue-500'
+                        ? 'border-[#19C37D] bg-[#19C37D]/10'
+                        : 'border-gray-700 hover:border-gray-600'
                     }`}
             >
                 {error && (
-                    <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                    <div className="mb-4 p-3 bg-red-900/50 text-red-200 rounded border border-red-800">
                         {error}
                     </div>
                 )}
 
                 <div className="space-y-4">
-                    <div className="text-gray-600">
+                    <div className="text-gray-300">
                         {uploading ? (
                             <p>Uploading...</p>
                         ) : (
@@ -131,7 +131,7 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete, isP
                             />
                             <button
                                 onClick={() => fileInputRef.current?.click()}
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#19C37D] hover:bg-[#15A36B] focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:ring-offset-2 focus:ring-offset-[#343541]"
                                 disabled={uploading}
                             >
                                 Select PDF Files
@@ -139,7 +139,7 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete, isP
                         </div>
                     )}
 
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-400">
                         Accepts multiple PDF files • Maximum file size: 50MB per file
                     </p>
                 </div>

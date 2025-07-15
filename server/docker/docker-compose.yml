@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: ai-ta-server
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - UPLOAD_FOLDER=/app/uploads
+    volumes:
+      - ../src:/app/src
+      - ../config:/app/config
+      - ../uploads:/app/uploads
+      - ../secrets:/app/secrets
+    ports:
+      - "8000:8000"
+    restart: unless-stopped

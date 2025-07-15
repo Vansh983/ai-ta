@@ -3,6 +3,7 @@
 
 server/venv/
 server/.env
+server/secrets
 
 server/service_account.json
 server/__pycache__
@@ -63,3 +64,11 @@ client/.env.test.local
 client/.env.production.local
 
 client/yarn.lock
+
+*.pem
+*.key
+*.crt
+*.csr
+*.csr.pem
+*.csr.pem.key
+*.csr.pem.crt

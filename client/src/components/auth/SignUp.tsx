@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { signUp } from '@/lib/firebase/auth.utils';
 import { createUserDocument, UserRole } from '@/lib/firebase/user.utils';
+import Link from 'next/link';
 
 interface SignUpProps {
     onSignUp?: () => void;
@@ -37,18 +38,21 @@ export default function SignUp({ onSignUp }: SignUpProps) {
     };
 
     return (
-        <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-6">Create Account</h2>
+        <div className="w-full">
+            <div className="text-center mb-8">
+                <h2 className="text-3xl font-semibold text-white mb-2">Create Account</h2>
+                <p className="text-gray-400">Join AI Teaching Assistant today</p>
+            </div>
 
             {error && (
-                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                <div className="mb-6 p-4 bg-[#463239] text-[#FF4444] rounded-lg border border-[#FF4444]/20">
                     {error}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
                         Email
                     </label>
                     <input
@@ -56,20 +60,21 @@ export default function SignUp({ onSignUp }: SignUpProps) {
                         id="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        className="w-full p-3 bg-[#40414F] text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent placeholder-gray-500"
                         required
+                        placeholder="Enter your email"
                     />
                 </div>
 
                 <div>
-                    <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="role" className="block text-sm font-medium text-gray-300 mb-2">
                         Role
                     </label>
                     <select
                         id="role"
                         value={role}
                         onChange={(e) => setRole(e.target.value as UserRole)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        className="w-full p-3 bg-[#40414F] text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent"
                         required
                     >
                         <option value="student">Student</option>
@@ -78,7 +83,7 @@ export default function SignUp({ onSignUp }: SignUpProps) {
                 </div>
 
                 <div>
-                    <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
                         Password
                     </label>
                     <input
@@ -86,17 +91,18 @@ export default function SignUp({ onSignUp }: SignUpProps) {
                         id="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        className="w-full p-3 bg-[#40414F] text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent placeholder-gray-500"
                         required
                         minLength={6}
+                        placeholder="Enter your password"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-gray-400">
                         Must be at least 6 characters long
                     </p>
                 </div>
 
                 <div>
-                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
                         Confirm Password
                     </label>
                     <input
@@ -104,21 +110,31 @@ export default function SignUp({ onSignUp }: SignUpProps) {
                         id="confirmPassword"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        className="w-full p-3 bg-[#40414F] text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent placeholder-gray-500"
                         required
                         minLength={6}
+                        placeholder="Confirm your password"
                     />
                 </div>
 
                 <button
                     type="submit"
                     disabled={loading}
-                    className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${loading ? 'opacity-50 cursor-not-allowed' : ''
+                    className={`w-full py-3 px-4 rounded-lg text-white bg-[#19C37D] hover:bg-[#15A36B] focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:ring-offset-2 focus:ring-offset-[#343541] transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                 >
                     {loading ? 'Creating account...' : 'Create Account'}
                 </button>
             </form>
+
+            <div className="mt-8 text-center">
+                <p className="text-gray-400">
+                    Already have an account?{' '}
+                    <Link href="/signin" className="text-[#19C37D] hover:text-[#15A36B]">
+                        Sign in
+                    </Link>
+                </p>
+            </div>
         </div>
     );
 } 

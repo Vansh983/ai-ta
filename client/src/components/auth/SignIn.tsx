@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { signIn } from '@/lib/auth/auth.utils';
+import Link from 'next/link';
 
 interface SignInProps {
     onSignIn?: () => void;
@@ -26,18 +27,21 @@ export default function SignIn({ onSignIn }: SignInProps) {
     };
 
     return (
-        <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-6">Sign In</h2>
+        <div className="w-full">
+            <div className="text-center mb-8">
+                <h2 className="text-3xl font-semibold text-white mb-2">Welcome Back</h2>
+                <p className="text-gray-400">Sign in to continue to AI Teaching Assistant</p>
+            </div>
 
             {error && (
-                <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">
+                <div className="mb-6 p-4 bg-[#463239] text-[#FF4444] rounded-lg border border-[#FF4444]/20">
                     {error}
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                    <label htmlFor="token" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="token" className="block text-sm font-medium text-gray-300 mb-2">
                         Access Token
                     </label>
                     <input
@@ -45,7 +49,7 @@ export default function SignIn({ onSignIn }: SignInProps) {
                         id="token"
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="w-full p-3 bg-[#40414F] text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent placeholder-gray-500"
                         required
                         placeholder="Enter your access token"
                     />
@@ -54,12 +58,21 @@ export default function SignIn({ onSignIn }: SignInProps) {
                 <button
                     type="submit"
                     disabled={loading}
-                    className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${loading ? 'opacity-50 cursor-not-allowed' : ''
+                    className={`w-full py-3 px-4 rounded-lg text-white bg-[#19C37D] hover:bg-[#15A36B] focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:ring-offset-2 focus:ring-offset-[#343541] transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                 >
                     {loading ? 'Signing in...' : 'Sign In'}
                 </button>
             </form>
+
+            <div className="mt-8 text-center">
+                <p className="text-gray-400">
+                    Don&apos;t have an account?{' '}
+                    <Link href="/auth/signup" className="text-[#19C37D] hover:text-[#15A36B]">
+                        Sign up
+                    </Link>
+                </p>
+            </div>
         </div>
     );
 } 

@@ -4,9 +4,9 @@ from pydantic import BaseModel
 import uvicorn
 import shutil
 import os
-from ingestion import ingest_document
-from chat import generate_answer
-from firebase_utils import download_file_from_firebase, get_course_files, db
+from src.ingestion import ingest_document
+from src.chat import generate_answer
+from src.firebase_utils import download_file_from_firebase, get_course_files, db
 import faiss
 import numpy as np
 from datetime import datetime, timezone
@@ -110,6 +110,8 @@ async def refresh_course(request: RefreshCourseRequest) -> dict:
     """
     Refreshes the RAG index for a specific course by reprocessing all its files
     """
+
+    print(f"Refreshing course {request.courseId}")
     # Validate request data
     if not request.courseId:
         raise HTTPException(status_code=400, detail="courseId is required")
@@ -353,6 +355,11 @@ async def get_chat_history(
 @app.get("/")
 async def root():
     return {"message": "Hello from Vansh"}
+
+@app.get("/")
+async def root():
+    return {"message": "Hello from Vansh"}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

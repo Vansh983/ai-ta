@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { BaseLayout } from "@/components/layout/base-layout";
 import { Toaster } from "sonner";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "AI Teaching Assistant",
@@ -17,8 +14,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className="dark">
+      <body className="min-h-screen font-sans antialiased bg-[#343541]">
         <BaseLayout>{children}</BaseLayout>
         <Toaster />
       </body>
