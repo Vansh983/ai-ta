@@ -1,8 +1,8 @@
 import openai
 import faiss
 import numpy as np
-from utils import chunk_text
-from .config import OPENAI_API_KEY
+from src.utils import chunk_text
+from config.config import OPENAI_API_KEY
 from typing import List, Tuple
 
 openai.api_key = OPENAI_API_KEY
