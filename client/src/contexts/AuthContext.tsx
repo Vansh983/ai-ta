@@ -7,12 +7,14 @@ interface AuthContextType {
     user: AuthUser | null;
     loading: boolean;
     signOut: () => Promise<void>;
+    refreshUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
     user: null,
     loading: true,
     signOut: async () => { },
+    refreshUser: () => { },
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -42,6 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, []);
 
+    const refreshUser = () => {
+        const currentUser = getCurrentUser();
+        setUser(currentUser);
+    };
+
     const value = {
         user,
         loading,
@@ -49,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await signOut();
             setUser(null);
         },
+        refreshUser,
     };
 
     return (

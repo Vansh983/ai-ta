@@ -67,7 +67,7 @@ def init_db():
         from .models import (
             User, Course, Enrollment, CourseMaterial, 
             ChatSession, ChatMessage, VectorEmbedding,
-            UserAnalytics, CourseAnalytics
+            UserAnalytics, CourseAnalytics, Traffic
         )
         
         # Create all tables

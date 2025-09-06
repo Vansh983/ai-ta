@@ -235,3 +235,30 @@ class CourseAnalytics(Base):
     
     def __repr__(self):
         return f"<CourseAnalytics(course_id={self.course_id}, date='{self.date}')>"
+
+class Traffic(Base):
+    __tablename__ = 'traffic'
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    page_name = Column(String(255), nullable=False, index=True)
+    page_url = Column(String(2048), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    session_id = Column(String(255), nullable=False, index=True)
+    ip_address = Column(String(255))  # Will store hashed/anonymized IP
+    user_agent = Column(Text)
+    referrer = Column(String(2048))
+    location_country = Column(String(100))
+    location_city = Column(String(100))
+    device_type = Column(String(50))  # mobile, desktop, tablet
+    browser = Column(String(100))
+    os = Column(String(100))
+    screen_resolution = Column(String(50))
+    time_on_page = Column(Integer)  # milliseconds
+    meta_data = Column(JSON, default={})
+    
+    # Relationships
+    user = relationship("User", backref="traffic_records")
+    
+    def __repr__(self):
+        return f"<Traffic(id={self.id}, page='{self.page_name}', user_id={self.user_id})>"

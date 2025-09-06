@@ -24,18 +24,23 @@ export function MainNav() {
 
       try {
         const coursesData = await apiService.getCourses();
+        console.log("Raw courses data:", coursesData, "Type:", typeof coursesData);
+
+        // Ensure coursesData is an array
+        const coursesArray = Array.isArray(coursesData) ? coursesData : [];
 
         // Filter courses based on user role
         const filteredCourses =
           user.role === "instructor"
-            ? coursesData.filter((course) => course.userId === user.uid)
-            : coursesData;
+            ? coursesArray.filter((course) => course.userId === user.uid)
+            : coursesArray;
 
-        console.log("Fetched courses:", filteredCourses);
+        console.log("Filtered courses:", filteredCourses);
         setCourses(filteredCourses);
       } catch (error) {
         console.error("Error fetching courses:", error);
         toast.error("Failed to fetch courses");
+        setCourses([]); // Set empty array on error
       } finally {
         setLoading(false);
       }

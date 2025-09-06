@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { signIn } from '@/lib/auth/auth.utils';
+import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
 interface SignInProps {
@@ -7,7 +8,8 @@ interface SignInProps {
 }
 
 export default function SignIn({ onSignIn }: SignInProps) {
-    const [token, setToken] = useState('');
+    const { refreshUser } = useAuth();
+    const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -17,7 +19,9 @@ export default function SignIn({ onSignIn }: SignInProps) {
         setLoading(true);
 
         try {
-            await signIn(token);
+            await signIn(email);
+            // Refresh the auth context to pick up the new user
+            refreshUser();
             onSignIn?.();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to sign in');
@@ -41,17 +45,17 @@ export default function SignIn({ onSignIn }: SignInProps) {
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                    <label htmlFor="token" className="block text-sm font-medium text-gray-300 mb-2">
-                        Access Token
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+                        Email
                     </label>
                     <input
-                        type="password"
-                        id="token"
-                        value={token}
-                        onChange={(e) => setToken(e.target.value)}
+                        type="email"
+                        id="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                         className="w-full p-3 bg-[#40414F] text-white rounded-lg border border-gray-700 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent placeholder-gray-500"
                         required
-                        placeholder="Enter your access token"
+                        placeholder="Enter your email"
                     />
                 </div>
 
