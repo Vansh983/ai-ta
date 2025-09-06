@@ -35,7 +35,7 @@ export function MainNav() {
 
   useEffect(() => {
     const fetchCourses = async () => {
-      if (authLoading) return;
+      if (authLoading || !user) return;
 
       try {
         const coursesRef = collection(db, "courses");
@@ -47,8 +47,14 @@ export function MainNav() {
           updatedAt: doc.data().updatedAt?.toDate(),
         })) as Course[];
 
-        console.log("Fetched courses:", coursesData);
-        setCourses(coursesData);
+        // Filter courses based on user role
+        const filteredCourses =
+          user.role === "instructor"
+            ? coursesData.filter((course) => course.userId === user.uid)
+            : coursesData;
+
+        console.log("Fetched courses:", filteredCourses);
+        setCourses(filteredCourses);
       } catch (error) {
         console.error("Error fetching courses:", error);
         toast.error("Failed to fetch courses");
@@ -57,10 +63,10 @@ export function MainNav() {
       }
     };
 
-    if (!authLoading) {
+    if (!authLoading && user) {
       fetchCourses();
     }
-  }, [authLoading]);
+  }, [authLoading, user]);
 
   const handleSignOut = async () => {
     try {
@@ -83,7 +89,7 @@ export function MainNav() {
         {showCourseList ? (
           <div>
             <h3 className='px-3 mb-2 text-xs font-medium text-gray-400 uppercase'>
-              Available Courses
+              {user?.role === "instructor" ? "My Courses" : "Available Courses"}
             </h3>
             {loading ? (
               <div className='flex items-center justify-center p-4'>
@@ -93,12 +99,25 @@ export function MainNav() {
               <div className='space-y-1'>
                 {courses.map((course) => {
                   console.log("Rendering course:", course);
+
+                  // Determine the correct href and active state based on user role
+                  const href =
+                    user?.role === "instructor"
+                      ? `/instructor/${course.id}`
+                      : `/student?course=${course.id}`;
+
+                  const isActive =
+                    user?.role === "instructor"
+                      ? pathname === `/instructor/${course.id}`
+                      : pathname === "/student" &&
+                        currentCourseId === course.id;
+
                   return (
                     <Link
                       key={course.id}
-                      href={`/student?course=${course.id}`}
+                      href={href}
                       className={`block px-3 py-2 rounded-lg text-sm ${
-                        pathname === "/student" && currentCourseId === course.id
+                        isActive
                           ? "bg-[#343541] text-white"
                           : "text-gray-300 hover:bg-[#2A2B32]"
                       }`}
@@ -113,7 +132,9 @@ export function MainNav() {
               </div>
             ) : (
               <p className='text-center text-gray-400 p-4'>
-                No courses available
+                {user?.role === "instructor"
+                  ? "No courses created yet"
+                  : "No courses available"}
               </p>
             )}
           </div>

@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import DocumentUpload from "@/components/DocumentUpload";
 import DocumentList from "@/components/DocumentList";
+import CourseAboutCards from "@/components/CourseAboutCards";
+import TopKeywords from "@/components/TopKeywords";
+import StudentUsageCharts from "@/components/StudentUsageCharts";
 import {
   getCourse,
   uploadDocument,
@@ -12,6 +15,7 @@ import {
   getCourseDocuments,
 } from "@/lib/firebase/firebase.utils";
 import type { Document } from "@/lib/firebase/firebase.utils";
+
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
 
@@ -23,6 +27,7 @@ interface Course {
   term: "Fall" | "Winter" | "Summer";
   year: number;
   description: string;
+  documents: string[];
   createdAt: Date;
   updatedAt: Date;
   userId: string;
@@ -61,7 +66,13 @@ export default function CourseDetailPage() {
           return;
         }
 
-        setCourse(courseData);
+        // Update courseData to include document names for the CourseAboutCards component
+        const courseWithDocuments = {
+          ...courseData,
+          documents: courseDocuments.map((doc) => doc.name),
+        };
+
+        setCourse(courseWithDocuments);
         setDocuments(courseDocuments);
         setError("");
       } catch (err) {
@@ -239,6 +250,14 @@ export default function CourseDetailPage() {
           </div>
         )}
 
+        {/* About Course Cards */}
+        <div className='mb-8'>
+          <h2 className='text-xl font-semibold text-white mb-6'>
+            Course Overview
+          </h2>
+          <CourseAboutCards course={course} />
+        </div>
+
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
           {/* Course Information */}
           <div className='lg:col-span-2 space-y-8'>
@@ -333,6 +352,22 @@ export default function CourseDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Student Keywords and Prompts */}
+        <div className='mt-12'>
+          <h2 className='text-xl font-semibold text-white mb-6'>
+            Student Insights
+          </h2>
+          <TopKeywords courseCode={course.code} />
+        </div>
+
+        {/* Student Usage Analytics */}
+        <div className='mt-12'>
+          <h2 className='text-xl font-semibold text-white mb-6'>
+            Usage Analytics
+          </h2>
+          <StudentUsageCharts courseCode={course.code} />
         </div>
       </div>
     </RequireAuth>

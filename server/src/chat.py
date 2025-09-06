@@ -1,8 +1,8 @@
 import openai
-from config import OPENAI_API_KEY
-from retrieval import retrieve
+from config.config import OPENAI_API_KEY
+from src.retrieval import retrieve
 from typing import List, Dict, Optional, Any
-from firebase_utils import db
+from src.firebase_utils import db
 from datetime import datetime
 import faiss
 

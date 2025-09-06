@@ -11,8 +11,12 @@ ARG NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+# Enable Corepack for Yarn 4
+RUN corepack enable
+
 # Copy package files
-COPY package.json yarn.lock ./
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn .yarn
 
 # Install dependencies
 RUN yarn install --frozen-lockfile
@@ -20,6 +24,10 @@ RUN yarn install --frozen-lockfile
 # Stage 2: Builder
 FROM node:20-alpine AS builder
 WORKDIR /app
+
+# Enable Corepack for Yarn 4
+RUN corepack enable
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
