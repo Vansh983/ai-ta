@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -6,7 +6,7 @@ import shutil
 import os
 from uuid import UUID, uuid4
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -19,8 +19,11 @@ from src.repositories.user_repository import user_repository
 from src.repositories.course_repository import course_repository
 from src.repositories.material_repository import material_repository, vector_repository
 from src.repositories.chat_repository import chat_repository
+from src.repositories.traffic_repository import traffic_repository
 from src.storage.file_operations import course_file_service
 from src.retrieval import retrieve_chunks_text, get_course_embedding_stats
+from src.auth import get_current_user, get_current_user_optional, require_instructor, require_student_or_instructor
+from src.database.models import User
 
 # Initialize logging
 logging.basicConfig(
@@ -100,6 +103,33 @@ class CreateUserRequest(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = "student"
 
+class TrafficTrackingRequest(BaseModel):
+    page_name: str
+    page_url: str
+    session_id: str
+    referrer: Optional[str] = None
+    screen_resolution: Optional[str] = None
+    time_on_page: Optional[int] = None
+    meta_data: Optional[Dict[str, Any]] = None
+
+# Authentication models
+class AuthTokenRequest(BaseModel):
+    email: str
+    token: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: Optional[str]
+    role: str
+    is_active: bool
+    created_at: datetime
+    last_login: Optional[datetime]
+
+class AuthResponse(BaseModel):
+    user: UserResponse
+    message: str
+
 # Helper functions
 def validate_uuid(uuid_string: str, entity_name: str = "ID") -> UUID:
     """Validate and convert string to UUID"""
@@ -150,6 +180,75 @@ async def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unavailable")
+
+# Authentication Endpoints
+
+@app.post("/auth/verify", response_model=AuthResponse)
+async def verify_user(request: AuthTokenRequest, db: Session = Depends(get_db)):
+    """Verify user authentication by email or token"""
+    try:
+        user = user_repository.get_by_email(db, request.email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="User account is inactive")
+        
+        # Update last login
+        user_repository.update_last_login(db, user.id)
+        
+        return AuthResponse(
+            user=UserResponse(
+                id=str(user.id),
+                email=user.email,
+                name=user.name,
+                role=user.role,
+                is_active=user.is_active,
+                created_at=user.created_at,
+                last_login=user.last_login
+            ),
+            message="Authentication successful"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication verification failed: {e}")
+        raise HTTPException(status_code=500, detail="Authentication failed")
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current authenticated user information"""
+    return UserResponse(
+        id=str(current_user.id),
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+        last_login=current_user.last_login
+    )
+
+@app.get("/auth/users")
+async def list_users(
+    skip: int = 0, 
+    limit: int = 100,
+    current_user: User = Depends(require_instructor),
+    db: Session = Depends(get_db)
+):
+    """List all users (instructor only)"""
+    users = user_repository.get_active_users(db, skip=skip, limit=limit)
+    return [
+        UserResponse(
+            id=str(user.id),
+            email=user.email,
+            name=user.name,
+            role=user.role,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            last_login=user.last_login
+        )
+        for user in users
+    ]
 
 # Course Management Endpoints
 
@@ -535,6 +634,135 @@ async def get_course_analytics(course_id: str, days: int = 30, db: Session = Dep
     except Exception as e:
         logger.error(f"Error getting course analytics: {e}")
         raise HTTPException(status_code=500, detail="Failed to get analytics")
+
+# Traffic Tracking Endpoints
+
+@app.post("/track", status_code=204)
+async def track_page_visit(
+    request: TrafficTrackingRequest,
+    http_request: Request,
+    db: Session = Depends(get_db)
+):
+    """Track page visit - async, non-blocking endpoint"""
+    try:
+        # Extract headers for tracking
+        user_agent = http_request.headers.get("user-agent", "")
+        x_forwarded_for = http_request.headers.get("x-forwarded-for", "")
+        x_real_ip = http_request.headers.get("x-real-ip", "")
+        
+        # Get client IP address
+        client_ip = x_real_ip or x_forwarded_for or str(http_request.client.host if http_request.client else "unknown")
+        
+        # Try to extract user ID from authorization header
+        user_id = None
+        auth_header = http_request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            try:
+                # Try to parse the token as UUID
+                token = auth_header.replace("Bearer ", "")
+                user_id = UUID(token)
+            except ValueError:
+                # Not a valid UUID, leave as None
+                pass
+        
+        # Create traffic record asynchronously
+        traffic_record = traffic_repository.create_traffic_record(
+            db=db,
+            user_id=user_id,
+            page_name=request.page_name,
+            page_url=request.page_url,
+            session_id=request.session_id,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            referrer=request.referrer,
+            screen_resolution=request.screen_resolution,
+            meta_data=request.meta_data
+        )
+        
+        # Update time on page if provided
+        if request.time_on_page is not None and traffic_record:
+            traffic_repository.update_time_on_page(
+                db, traffic_record.id, request.time_on_page
+            )
+        
+        db.commit()
+        
+        # Return 204 No Content (success, no body needed)
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error tracking page visit: {e}")
+        # Don't fail the request - tracking should be silent
+        return None
+
+@app.get("/analytics/traffic")
+async def get_traffic_analytics(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    page_name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Get traffic analytics data"""
+    try:
+        # Default to last 30 days if no dates provided
+        if start_date is None:
+            start_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        if end_date is None:
+            end_date = datetime.now(timezone.utc).isoformat()
+        
+        start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        
+        # Get page views by date
+        page_views = traffic_repository.get_page_views_by_date(
+            db, start_dt, end_dt, page_name
+        )
+        
+        # Get popular pages
+        popular_pages = traffic_repository.get_popular_pages(
+            db, start_dt, end_dt, limit=10
+        )
+        
+        # Get device statistics
+        device_stats = traffic_repository.get_device_stats(
+            db, start_dt, end_dt
+        )
+        
+        return {
+            "period": {
+                "start_date": start_date,
+                "end_date": end_date
+            },
+            "page_views": [
+                {
+                    "date": item.date.isoformat(),
+                    "views": item.views,
+                    "unique_sessions": item.unique_sessions
+                }
+                for item in page_views
+            ],
+            "popular_pages": [
+                {
+                    "page_name": item.page_name,
+                    "views": item.views,
+                    "unique_sessions": item.unique_sessions,
+                    "avg_time_on_page": item.avg_time_on_page
+                }
+                for item in popular_pages
+            ],
+            "device_stats": [
+                {
+                    "device_type": item.device_type,
+                    "views": item.views,
+                    "unique_sessions": item.unique_sessions
+                }
+                for item in device_stats
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting traffic analytics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get traffic analytics")
 
 # Administrative Endpoints
 

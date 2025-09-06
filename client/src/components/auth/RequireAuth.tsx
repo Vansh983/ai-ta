@@ -14,7 +14,7 @@ interface RequireAuthProps {
 export default function RequireAuth({
     children,
     allowedRoles,
-    redirectTo = '/login'
+    redirectTo = '/auth/signin'
 }: RequireAuthProps) {
     const { user, loading } = useAuth();
     const router = useRouter();

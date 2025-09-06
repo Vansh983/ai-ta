@@ -61,7 +61,15 @@ class ApiService {
 
   // Course operations
   async getCourses(): Promise<Course[]> {
-    return this.request<Course[]>('/courses');
+    try {
+      const result = await this.request<Course[]>('/courses');
+      // Ensure we always return an array, even if backend returns different structure
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('Error in getCourses API:', error);
+      // Return empty array on error to prevent filter crash
+      return [];
+    }
   }
 
   async getCourse(courseId: string): Promise<Course> {
@@ -149,6 +157,21 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(userData),
     });
+  }
+
+  // Traffic analytics
+  async getTrafficAnalytics(params?: {
+    start_date?: string;
+    end_date?: string;
+    page_name?: string;
+  }): Promise<Record<string, unknown>> {
+    const searchParams = new URLSearchParams();
+    if (params?.start_date) searchParams.set('start_date', params.start_date);
+    if (params?.end_date) searchParams.set('end_date', params.end_date);
+    if (params?.page_name) searchParams.set('page_name', params.page_name);
+    
+    const queryString = searchParams.toString();
+    return this.request(`/analytics/traffic${queryString ? `?${queryString}` : ''}`);
   }
 }
 

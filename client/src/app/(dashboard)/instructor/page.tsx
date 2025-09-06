@@ -24,11 +24,16 @@ export default function InstructorDashboard() {
       try {
         setLoading(true);
         const fetchedCourses = await apiService.getCourses();
-        setCourses(fetchedCourses);
+        console.log("Raw courses data in instructor page:", fetchedCourses, "Type:", typeof fetchedCourses);
+        
+        // Ensure fetchedCourses is an array
+        const coursesArray = Array.isArray(fetchedCourses) ? fetchedCourses : [];
+        setCourses(coursesArray);
         setError("");
       } catch (err) {
         setError("Failed to load courses. Please try again.");
         console.error("Error fetching courses:", err);
+        setCourses([]); // Set empty array on error
       } finally {
         setLoading(false);
       }
