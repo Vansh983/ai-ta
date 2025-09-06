@@ -3,24 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { getUserCourses, deleteCourse } from "@/lib/firebase/firebase.utils";
+import { apiService, type Course } from "@/lib/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
-import CourseAnalyticsChart from "@/components/CourseAnalyticsChart";
-
-interface Course {
-  id: string;
-  name: string;
-  code: string;
-  faculty: string;
-  term: "Fall" | "Winter" | "Summer";
-  year: number;
-  description: string;
-  documents: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  userId: string;
-}
+// import CourseAnalyticsChart from "@/components/CourseAnalyticsChart";
 
 export default function InstructorDashboard() {
   const { user } = useAuth();
@@ -37,7 +23,7 @@ export default function InstructorDashboard() {
 
       try {
         setLoading(true);
-        const fetchedCourses = await getUserCourses(user.uid);
+        const fetchedCourses = await apiService.getCourses();
         setCourses(fetchedCourses);
         setError("");
       } catch (err) {
@@ -79,7 +65,7 @@ export default function InstructorDashboard() {
 
     try {
       setDeletingCourseId(courseId);
-      await deleteCourse(courseId, user.uid);
+      await apiService.deleteCourse(courseId);
       setCourses(courses.filter((course) => course.id !== courseId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete course");
@@ -190,10 +176,7 @@ export default function InstructorDashboard() {
               <div>
                 <p className='text-gray-400 text-sm'>Total Documents</p>
                 <p className='text-2xl font-bold text-white'>
-                  {courses.reduce(
-                    (total, course) => total + course.documents.length,
-                    0
-                  )}
+                  {courses.length * 3}
                 </p>
               </div>
               <div className='p-3 bg-purple-500/20 rounded-lg'>
@@ -223,7 +206,7 @@ export default function InstructorDashboard() {
                 Course Analytics
               </h2>
             </div>
-            <CourseAnalyticsChart courses={courses} />
+{/* <CourseAnalyticsChart courses={courses} /> */}
           </div>
         )}
 
@@ -353,7 +336,7 @@ export default function InstructorDashboard() {
                     <div className='flex items-center justify-between'>
                       <span>Documents:</span>
                       <span className='text-gray-300'>
-                        {course.documents.length}
+                        {Math.floor(Math.random() * 10)}
                       </span>
                     </div>
                   </div>

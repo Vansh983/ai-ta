@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createCourse } from '@/lib/firebase/firebase.utils';
+import { apiService } from '@/lib/services/api';
 
 interface CourseCreationProps {
     userId: string;
@@ -25,14 +25,13 @@ export default function CourseCreation({ userId, onCourseCreated }: CourseCreati
         setLoading(true);
 
         try {
-            const course = await createCourse({
+            const course = await apiService.createCourse({
                 name,
                 code,
                 faculty,
                 term,
                 year,
                 description,
-                userId,
             });
 
             // Reset form

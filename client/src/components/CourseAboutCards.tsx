@@ -8,25 +8,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-interface Course {
-  id: string;
-  name: string;
-  code: string;
-  faculty: string;
-  term: "Fall" | "Winter" | "Summer";
-  year: number;
-  description: string;
-  documents: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  userId: string;
-}
+import { type Course } from "@/lib/services/api";
 
 interface CourseAboutCardsProps {
   course: Course;
+  documentsCount?: number;
 }
 
-export default function CourseAboutCards({ course }: CourseAboutCardsProps) {
+export default function CourseAboutCards({ course, documentsCount = 0 }: CourseAboutCardsProps) {
   // Generate dummy statistics
   const stats = {
     totalStudents: Math.floor(Math.random() * 150) + 50, // 50-200 students
@@ -75,7 +64,7 @@ export default function CourseAboutCards({ course }: CourseAboutCardsProps) {
           <div className='flex items-center justify-between'>
             <span className='text-gray-400 text-xs'>Documents</span>
             <span className='text-blue-400 font-semibold'>
-              {course.documents.length}
+              {documentsCount}
             </span>
           </div>
         </CardContent>

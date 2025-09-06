@@ -9,11 +9,12 @@ services:
       - POSTGRES_DB=ai_ta
       - POSTGRES_USER=ai_ta_user
       - POSTGRES_PASSWORD=ai_ta_password
+      - POSTGRES_HOST_AUTH_METHOD=trust
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./server/docker/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+      - ./docker/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ai_ta_user -d ai_ta"]
       interval: 10s
@@ -29,16 +30,14 @@ services:
     environment:
       - SERVICES=s3
       - DEBUG=1
-      - PERSISTENCE=1
+      - DATA_DIR=/tmp/localstack/data
       - DOCKER_HOST=unix:///var/run/docker.sock
       - AWS_DEFAULT_REGION=us-east-1
-      - LS_LOG=warn
     ports:
       - "4566:4566"
     volumes:
-      - localstack_data:/var/lib/localstack
-      - ./server/docker/init_s3.sh:/etc/localstack/init/ready.d/init_s3.sh
-      - /var/run/docker.sock:/var/run/docker.sock
+      - localstack_data:/tmp/localstack
+      - ./docker/init_s3.sh:/etc/localstack/init/ready.d/init_s3.sh
     networks:
       - app-network
 
@@ -54,10 +53,10 @@ services:
     networks:
       - app-network
 
-  # Backend API Server
+  # Main application server
   server:
     build:
-      context: ./server
+      context: .
       dockerfile: docker/Dockerfile
     container_name: ai-ta-server
     environment:
@@ -68,16 +67,14 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - S3_BUCKET_NAME=ai-ta-storage
       - REDIS_URL=redis://redis:6379/0
-      - CORS_ORIGINS=http://localhost:3000,http://client:3000
-      - UPLOAD_FOLDER=/app/uploads
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-    env_file:
-      - ./server/.env
+      - UPLOAD_FOLDER=/app/uploads
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./uploads:/app/uploads
     ports:
       - "8000:8000"
-    volumes:
-      - ./server/uploads:/app/uploads
-      - ./server/src:/app/src  # For development hot reload
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,30 +82,6 @@ services:
         condition: service_started
       redis:
         condition: service_started
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  # Frontend Client
-  client:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=http://localhost:8000
-    container_name: ai-ta-client
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NODE_ENV=development
-    env_file:
-      - ./client/.env.local
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./client/src:/app/src  # For development hot reload
-      - ./client/public:/app/public
-    depends_on:
-      - server
     restart: unless-stopped
     networks:
       - app-network

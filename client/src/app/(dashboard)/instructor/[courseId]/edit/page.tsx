@@ -3,22 +3,9 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { getCourse, updateCourse } from "@/lib/firebase/firebase.utils";
+import { apiService, type Course } from "@/lib/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
-
-interface Course {
-  id: string;
-  name: string;
-  code: string;
-  faculty: string;
-  term: "Fall" | "Winter" | "Summer";
-  year: number;
-  description: string;
-  createdAt: Date;
-  updatedAt: Date;
-  userId: string;
-}
 
 export default function EditCoursePage() {
   const { user } = useAuth();
@@ -48,7 +35,7 @@ export default function EditCoursePage() {
 
       try {
         setLoading(true);
-        const courseData = await getCourse(courseId);
+        const courseData = await apiService.getCourse(courseId);
 
         // Check if user owns this course
         if (courseData.userId !== user.uid) {
@@ -92,10 +79,9 @@ export default function EditCoursePage() {
           term: courseTerm,
           year: courseYear,
           description: courseDescription,
-          userId: user.uid,
         };
 
-        await updateCourse(courseId, courseData);
+        await apiService.updateCourse(courseId, courseData);
 
         // Redirect back to course detail page
         router.push(`/instructor/${courseId}`);

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import DocumentUpload from "@/components/DocumentUpload";
-import { createCourse, uploadDocument } from "@/lib/firebase/firebase.utils";
+import { apiService } from "@/lib/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
 
@@ -44,16 +44,15 @@ export default function CreateCoursePage() {
           term: courseTerm,
           year: courseYear,
           description: courseDescription,
-          userId: user.uid,
         };
 
         // Create new course
-        const newCourse = await createCourse(courseData);
+        const newCourse = await apiService.createCourse(courseData);
 
         // Upload all pending documents
         if (pendingDocuments.length > 0) {
           const uploadPromises = pendingDocuments.map((pendingDoc) =>
-            uploadDocument(pendingDoc.file, newCourse.id, user.uid)
+            apiService.uploadMaterial(newCourse.id, pendingDoc.file)
           );
           await Promise.all(uploadPromises);
         }

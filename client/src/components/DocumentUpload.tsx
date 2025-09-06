@@ -1,11 +1,10 @@
 import { useState, useRef } from 'react';
-import { uploadDocument } from '@/lib/firebase/firebase.utils';
-import type { Document } from '@/lib/firebase/firebase.utils';
+import { apiService, type Material } from '@/lib/services/api';
 
 interface DocumentUploadProps {
     courseId: string | null;
     userId: string;
-    onUploadComplete?: (document: Document | File) => void;
+    onUploadComplete?: (document: Material | File) => void;
     isPending?: boolean;
 }
 
@@ -72,7 +71,7 @@ export default function DocumentUpload({ courseId, userId, onUploadComplete, isP
                     onUploadComplete?.(file);
                 } else if (courseId) {
                     // If we have a courseId, upload the document
-                    const document = await uploadDocument(file, courseId, userId);
+                    const document = await apiService.uploadMaterial(courseId, file);
                     onUploadComplete?.(document);
                 }
             }

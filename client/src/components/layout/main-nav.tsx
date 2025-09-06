@@ -5,23 +5,8 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase/firebase.config";
 import { toast } from "sonner";
-
-interface Course {
-  id: string;
-  name: string;
-  code: string;
-  faculty: string;
-  term: "Fall" | "Winter" | "Summer";
-  year: number;
-  description: string;
-  createdAt: Date;
-  updatedAt: Date;
-  documents: string[];
-  userId: string;
-}
+import { apiService, type Course } from "@/lib/services/api";
 
 export function MainNav() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -38,14 +23,7 @@ export function MainNav() {
       if (authLoading || !user) return;
 
       try {
-        const coursesRef = collection(db, "courses");
-        const coursesSnap = await getDocs(coursesRef);
-        const coursesData = coursesSnap.docs.map((doc) => ({
-          ...doc.data(),
-          id: doc.id,
-          createdAt: doc.data().createdAt?.toDate(),
-          updatedAt: doc.data().updatedAt?.toDate(),
-        })) as Course[];
+        const coursesData = await apiService.getCourses();
 
         // Filter courses based on user role
         const filteredCourses =
