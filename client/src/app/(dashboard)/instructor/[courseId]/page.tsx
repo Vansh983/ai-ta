@@ -8,30 +8,11 @@ import DocumentList from "@/components/DocumentList";
 import CourseAboutCards from "@/components/CourseAboutCards";
 import TopKeywords from "@/components/TopKeywords";
 import StudentUsageCharts from "@/components/StudentUsageCharts";
-import {
-  getCourse,
-  uploadDocument,
-  deleteCourse,
-  getCourseDocuments,
-} from "@/lib/firebase/firebase.utils";
-import type { Document } from "@/lib/firebase/firebase.utils";
+import { apiService, type Course, type Material } from "@/lib/services/api";
 
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
 
-interface Course {
-  id: string;
-  name: string;
-  code: string;
-  faculty: string;
-  term: "Fall" | "Winter" | "Summer";
-  year: number;
-  description: string;
-  documents: string[];
-  createdAt: Date;
-  updatedAt: Date;
-  userId: string;
-}
 
 export default function CourseDetailPage() {
   const { user } = useAuth();
@@ -40,7 +21,7 @@ export default function CourseDetailPage() {
   const courseId = params.courseId as string;
 
   const [course, setCourse] = useState<Course | null>(null);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents, setDocuments] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -56,8 +37,8 @@ export default function CourseDetailPage() {
 
         // Fetch course details and documents in parallel
         const [courseData, courseDocuments] = await Promise.all([
-          getCourse(courseId),
-          getCourseDocuments(courseId, user.uid),
+          apiService.getCourse(courseId),
+          apiService.getCourseMaterials(courseId),
         ]);
 
         // Check if user owns this course
@@ -66,13 +47,7 @@ export default function CourseDetailPage() {
           return;
         }
 
-        // Update courseData to include document names for the CourseAboutCards component
-        const courseWithDocuments = {
-          ...courseData,
-          documents: courseDocuments.map((doc) => doc.name),
-        };
-
-        setCourse(courseWithDocuments);
+        setCourse(courseData);
         setDocuments(courseDocuments);
         setError("");
       } catch (err) {
@@ -86,7 +61,7 @@ export default function CourseDetailPage() {
     fetchCourseData();
   }, [user, courseId]);
 
-  const handleDocumentUpload = async (document: Document | File) => {
+  const handleDocumentUpload = async (document: Material | File) => {
     if (!user || !courseId) return;
 
     try {
@@ -94,10 +69,9 @@ export default function CourseDetailPage() {
 
       // If it's a File, upload it. If it's already a Document, just add it to the list
       if (document instanceof File) {
-        const uploadedDocument = await uploadDocument(
-          document,
+        const uploadedDocument = await apiService.uploadMaterial(
           courseId,
-          user.uid
+          document
         );
         setDocuments((prev) => [uploadedDocument, ...prev]);
       } else {
@@ -129,7 +103,7 @@ export default function CourseDetailPage() {
 
     try {
       setDeleting(true);
-      await deleteCourse(courseId, user.uid);
+      await apiService.deleteCourse(courseId);
       router.push("/instructor");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete course");
@@ -255,7 +229,7 @@ export default function CourseDetailPage() {
           <h2 className='text-xl font-semibold text-white mb-6'>
             Course Overview
           </h2>
-          <CourseAboutCards course={course} />
+          <CourseAboutCards course={course} documentsCount={documents.length} />
         </div>
 
         <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
@@ -286,7 +260,7 @@ export default function CourseDetailPage() {
                 userId={user.uid}
                 onDocumentDeleted={() => {
                   // Refresh documents list when a document is deleted
-                  getCourseDocuments(courseId, user.uid).then(setDocuments);
+                  apiService.getCourseMaterials(courseId).then(setDocuments);
                 }}
               />
             </div>

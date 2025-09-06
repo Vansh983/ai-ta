@@ -2,26 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase/firebase.config";
-import { sendMessage, refreshCourse, type ChatMessage, storeMessage, getChatHistory } from "@/lib/services/chat";
 import { toast } from "sonner";
-import { auth } from "@/lib/firebase/firebase.config";
 import { useSearchParams } from "next/navigation";
-
-interface Course {
-    id: string;
-    name: string;
-    code: string;
-    faculty: string;
-    term: 'Fall' | 'Winter' | 'Summer';
-    year: number;
-    description: string;
-    createdAt: Date;
-    updatedAt: Date;
-    documents: string[];
-    userId: string;
-}
+import { apiService, type Course, type ChatMessage } from "@/lib/services/api";
 
 export default function StudentDashboard() {
     const searchParams = useSearchParams();
@@ -44,15 +27,7 @@ export default function StudentDashboard() {
     useEffect(() => {
         const fetchCourses = async () => {
             try {
-                const coursesRef = collection(db, 'courses');
-                const coursesSnap = await getDocs(coursesRef);
-                const coursesData = coursesSnap.docs.map(doc => ({
-                    ...doc.data(),
-                    id: doc.id,
-                    createdAt: doc.data().createdAt?.toDate(),
-                    updatedAt: doc.data().updatedAt?.toDate(),
-                })) as Course[];
-
+                const coursesData = await apiService.getCourses();
                 setCourses(coursesData);
 
                 // If we have a courseId in URL, select that course
@@ -78,19 +53,13 @@ export default function StudentDashboard() {
         const loadChatHistory = async () => {
             if (!selectedCourse) return;
 
-            const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
-
             setLoadingChat(true);
             try {
-                const history = await getChatHistory(selectedCourse.id, userId);
+                const history = await apiService.getChatHistory(selectedCourse.id);
                 setMessages(history);
             } catch (error) {
                 console.error("Error fetching chat history:", error);
-                if (error instanceof Error && error.message.includes('requires an index')) {
-                    toast.error("Chat history index is being built. Please try again in a few minutes.");
-                } else {
-                    toast.error("Failed to load chat history");
-                }
+                toast.error("Failed to load chat history");
             } finally {
                 setLoadingChat(false);
             }
@@ -107,9 +76,7 @@ export default function StudentDashboard() {
         e.preventDefault();
         if (!selectedCourse || !newMessage.trim() || sendingMessage) return;
 
-        const userId = auth.currentUser?.uid || `guest-${Date.now()}`;
         const courseId = selectedCourse?.id;
-
         if (!courseId) {
             toast.error("No course selected");
             return;
@@ -121,13 +88,14 @@ export default function StudentDashboard() {
             return;
         }
 
+        // Add user message to UI immediately
         const userMessage: ChatMessage = {
             id: Date.now().toString(),
             content: messageContent,
             sender: "user",
             timestamp: new Date(),
             courseId: courseId,
-            userId: userId,
+            userId: "current-user", // Will be handled by API service
         };
 
         setMessages(prev => [...prev, userMessage]);
@@ -135,27 +103,29 @@ export default function StudentDashboard() {
         setSendingMessage(true);
 
         try {
-            await storeMessage(userMessage);
-            const response = await sendMessage(courseId, messageContent, userId);
+            // Send message to API
+            const response = await apiService.sendChatMessage(courseId, messageContent);
 
             if (!response || !response.answer) {
                 throw new Error("Invalid response from server");
             }
 
+            // Add AI response to messages
             const aiMessage: ChatMessage = {
                 id: (Date.now() + 1).toString(),
                 content: response.answer,
                 sender: "ai",
                 timestamp: new Date(),
                 courseId: courseId,
-                userId: userId,
+                userId: "ai-assistant",
             };
 
-            await storeMessage(aiMessage);
             setMessages(prev => [...prev, aiMessage]);
         } catch (error) {
             console.error("Error sending message:", error);
             toast.error("Failed to get AI response");
+            // Remove the user message on failure
+            setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
         } finally {
             setSendingMessage(false);
         }

@@ -1,46 +1,80 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 import shutil
 import os
-from src.ingestion import ingest_document
-from src.chat import generate_answer
-from src.firebase_utils import download_file_from_firebase, get_course_files, db
-import faiss
-import numpy as np
+from uuid import UUID, uuid4
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple, Any
+import logging
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 
-app = FastAPI()
+# Local imports
+from src.ingestion import ingest_course_material, process_unprocessed_materials
+from src.chat import generate_answer, get_conversation_history_from_db
+from src.database.connection import get_database_session, init_db
+from src.repositories.user_repository import user_repository
+from src.repositories.course_repository import course_repository
+from src.repositories.material_repository import material_repository, vector_repository
+from src.repositories.chat_repository import chat_repository
+from src.storage.file_operations import course_file_service
+from src.retrieval import retrieve_chunks_text, get_course_embedding_stats
+
+# Initialize logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Initialize FastAPI app
+app = FastAPI(title="AI Teaching Assistant", version="2.0.0")
 
 # Configure CORS
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://ai-ta.vercel.app",
-    ], 
+    allow_origins=CORS_ORIGINS + ["https://ai-ta.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# In-memory storage for course indexes.
-# This dictionary maps course IDs to a tuple: (FAISS index, corresponding chunks)
-course_indexes = {}
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Initializing AI Teaching Assistant server...")
+    try:
+        init_db()
+        logger.info("Database initialized successfully")
+        
+        # Process any unprocessed materials on startup
+        processed_count = process_unprocessed_materials()
+        if processed_count > 0:
+            logger.info(f"Processed {processed_count} materials on startup")
+    except Exception as e:
+        logger.error(f"Failed to initialize application: {e}")
+        raise
 
+# Dependency to get database session
+def get_db():
+    db = get_database_session()
+    try:
+        yield db
+    finally:
+        db.close()
 
+# Pydantic models
 class QueryRequest(BaseModel):
     courseId: str
     query: str
     userId: Optional[str] = "anonymous"
 
-
 class RefreshCourseRequest(BaseModel):
     courseId: str
     userId: Optional[str] = "anonymous"
-
 
 class ChatMessage(BaseModel):
     content: str
@@ -48,318 +82,474 @@ class ChatMessage(BaseModel):
     userId: Optional[str] = "anonymous"
     sender: Optional[str] = "user"
 
-
 class ChatHistoryRequest(BaseModel):
     courseId: str
     userId: Optional[str] = "anonymous"
     limit: Optional[int] = 10
 
+class CreateCourseRequest(BaseModel):
+    course_code: str
+    name: str
+    description: Optional[str] = None
+    instructor_email: Optional[str] = None
+    semester: Optional[str] = None
+    year: Optional[int] = None
 
-def load_course_content(courseId: str) -> Tuple[faiss.Index, List[str]]:
-    """
-    Loads and processes all documents for a course from Firebase Storage
-    Returns a tuple of (faiss.Index, list of text chunks)
-    """
-    # Get all files directly from storage
-    file_paths = get_course_files(courseId)
-    if not file_paths:
-        raise HTTPException(status_code=404, detail="No files found for this course")
+class CreateUserRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+    role: Optional[str] = "student"
 
-    all_chunks = []
-    all_embeddings = []
-    dimension = None
+# Helper functions
+def validate_uuid(uuid_string: str, entity_name: str = "ID") -> UUID:
+    """Validate and convert string to UUID"""
+    try:
+        return UUID(uuid_string)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {entity_name} format")
 
-    # Process each file
-    for file_path in file_paths:
+def get_or_create_user(db: Session, user_id: str) -> Optional[Any]:
+    """Get user by ID, handling anonymous users"""
+    if user_id == "anonymous":
+        return None
+    
+    try:
+        user_uuid = UUID(user_id)
+        return user_repository.get_by_id(db, user_uuid)
+    except ValueError:
+        # Try to find by email if it's not a UUID
+        return user_repository.get_by_email(db, user_id)
+
+# API Endpoints
+
+@app.get("/")
+async def root():
+    return {
+        "message": "AI Teaching Assistant API v2.0", 
+        "status": "running",
+        "database": "postgresql",
+        "storage": "s3"
+    }
+
+@app.get("/health")
+async def health_check(db: Session = Depends(get_db)):
+    """Health check endpoint"""
+    try:
+        # Test database connection
+        db.execute(text("SELECT 1"))
+        
+        # Test S3 connection
+        s3_status = course_file_service.s3.health_check()
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "storage": "connected" if s3_status else "disconnected",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=503, detail="Service unavailable")
+
+# Course Management Endpoints
+
+@app.post("/courses")
+async def create_course(request: CreateCourseRequest, db: Session = Depends(get_db)):
+    """Create a new course"""
+    try:
+        # Find instructor if email provided
+        instructor_id = None
+        if request.instructor_email:
+            instructor = user_repository.get_by_email(db, request.instructor_email)
+            if instructor:
+                instructor_id = instructor.id
+            else:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Instructor with email {request.instructor_email} not found"
+                )
+        
+        course = course_repository.create_course(
+            db,
+            course_code=request.course_code,
+            name=request.name,
+            description=request.description,
+            instructor_id=instructor_id,
+            semester=request.semester,
+            year=request.year
+        )
+        db.commit()
+        
+        return {
+            "id": str(course.id),
+            "course_code": course.course_code,
+            "name": course.name,
+            "description": course.description,
+            "created_at": course.created_at.isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating course: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create course")
+
+@app.get("/courses")
+async def list_courses(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """List all active courses"""
+    try:
+        courses = course_repository.get_active_courses(db, skip=skip, limit=limit)
+        return {
+            "courses": [
+                {
+                    "id": str(course.id),
+                    "course_code": course.course_code,
+                    "name": course.name,
+                    "description": course.description,
+                    "instructor": {
+                        "name": course.instructor.name,
+                        "email": course.instructor.email
+                    } if course.instructor else None,
+                    "semester": course.semester,
+                    "year": course.year
+                }
+                for course in courses
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error listing courses: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list courses")
+
+@app.get("/courses/{course_id}")
+async def get_course(course_id: str, db: Session = Depends(get_db)):
+    """Get course details"""
+    course_uuid = validate_uuid(course_id, "course ID")
+    
+    course = course_repository.get_by_id(db, course_uuid)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Get course statistics
+    stats = get_course_embedding_stats(course_uuid, db)
+    
+    return {
+        "id": str(course.id),
+        "course_code": course.course_code,
+        "name": course.name,
+        "description": course.description,
+        "instructor": {
+            "name": course.instructor.name,
+            "email": course.instructor.email
+        } if course.instructor else None,
+        "semester": course.semester,
+        "year": course.year,
+        "stats": stats
+    }
+
+# User Management Endpoints
+
+@app.post("/users")
+async def create_user(request: CreateUserRequest, db: Session = Depends(get_db)):
+    """Create a new user"""
+    try:
+        user = user_repository.create_user(
+            db,
+            email=request.email,
+            name=request.name,
+            role=request.role
+        )
+        db.commit()
+        
+        return {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "created_at": user.created_at.isoformat()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating user: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create user")
+
+# File Upload Endpoints
+
+@app.post("/upload")
+async def upload_file(
+    courseId: str = Form(...),
+    userId: str = Form(default="anonymous"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Upload a course material file"""
+    try:
+        course_uuid = validate_uuid(courseId, "course ID")
+        
+        # Verify course exists
+        course = course_repository.get_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Get uploader (can be None for anonymous)
+        uploader = get_or_create_user(db, userId)
+        uploader_id = uploader.id if uploader else None
+        
+        # Create material record
+        material = material_repository.create_material(
+            db,
+            course_id=course_uuid,
+            uploaded_by=uploader_id,
+            file_name=file.filename,
+            s3_key="",  # Will be set after upload
+            file_size=file.size if hasattr(file, 'size') else None,
+            file_type=os.path.splitext(file.filename)[1].lower(),
+            mime_type=file.content_type
+        )
+        db.flush()  # Get the material ID
+        
+        # Upload to S3
+        s3_key = course_file_service.upload_course_material(
+            course_uuid, material.id, file.file, file.filename, file.content_type
+        )
+        
+        if not s3_key:
+            raise HTTPException(status_code=500, detail="Failed to upload file to storage")
+        
+        # Update material with S3 key
+        material_repository.update(db, material, s3_key=s3_key)
+        db.commit()
+        
+        # Process the document asynchronously (in real app, use task queue)
         try:
-            # Download and process the file
-            content = download_file_from_firebase(file_path)
-            index, chunks = ingest_document(content)
-
-            # Get embeddings from the index
-            embeddings = index.reconstruct_n(0, index.ntotal)
-
-            if dimension is None:
-                dimension = embeddings.shape[1]
-
-            all_chunks.extend(chunks)
-            all_embeddings.append(embeddings)
-
-        except ValueError as e:
-            print(f"Skipping file {file_path} due to ingestion error: {str(e)}")
-            continue
+            ingest_course_material(material.id, course_uuid)
         except Exception as e:
-            print(f"Error processing file {file_path}: {str(e)}")
-            continue
+            logger.error(f"Failed to process uploaded file: {e}")
+            # Don't fail the upload, processing can be retried
+        
+        return {
+            "message": "File uploaded successfully",
+            "material_id": str(material.id),
+            "filename": file.filename,
+            "s3_key": s3_key
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload file")
 
-    if not all_chunks:
-        raise HTTPException(status_code=500, detail="Failed to process course files")
+@app.get("/courses/{course_id}/materials")
+async def list_course_materials(course_id: str, db: Session = Depends(get_db)):
+    """List materials for a course"""
+    course_uuid = validate_uuid(course_id, "course ID")
+    
+    materials = material_repository.get_course_materials(db, course_uuid)
+    
+    return {
+        "materials": [
+            {
+                "id": str(material.id),
+                "file_name": material.file_name,
+                "file_type": material.file_type,
+                "file_size": material.file_size,
+                "uploaded_at": material.uploaded_at.isoformat(),
+                "is_processed": material.is_processed,
+                "processing_status": material.processing_status,
+                "uploader": {
+                    "name": material.uploader.name,
+                    "email": material.uploader.email
+                } if material.uploader else None
+            }
+            for material in materials
+        ]
+    }
 
-    # Combine all embeddings
-    combined_embeddings = np.vstack(all_embeddings)
-
-    # Create a new combined index
-    combined_index = faiss.IndexFlatL2(dimension)
-    combined_index.add(combined_embeddings.astype("float32"))
-
-    return combined_index, all_chunks
-
+# Course Content Management
 
 @app.post("/refresh-course")
-async def refresh_course(request: RefreshCourseRequest) -> dict:
-    """
-    Refreshes the RAG index for a specific course by reprocessing all its files
-    """
-
-    print(f"Refreshing course {request.courseId}")
-    # Validate request data
-    if not request.courseId:
-        raise HTTPException(status_code=400, detail="courseId is required")
-
+async def refresh_course(request: RefreshCourseRequest, db: Session = Depends(get_db)):
+    """Refresh course embeddings by reprocessing materials"""
     try:
-        index, chunks = load_course_content(request.courseId)
-        course_indexes[request.courseId] = (index, chunks)
+        course_uuid = validate_uuid(request.courseId, "course ID")
+        
+        # Verify course exists
+        course = course_repository.get_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Get all materials for the course
+        materials = material_repository.get_course_materials(db, course_uuid)
+        
+        if not materials:
+            raise HTTPException(status_code=404, detail="No materials found for this course")
+        
+        # Reset processing status for all materials
+        processed_count = 0
+        for material in materials:
+            # Delete existing embeddings
+            vector_repository.delete_material_embeddings(db, material.id)
+            
+            # Reset processing status
+            material_repository.update_processing_status(
+                db, material.id, 'pending', is_processed=False
+            )
+            
+            # Reprocess
+            if ingest_course_material(material.id, course_uuid):
+                processed_count += 1
+        
+        db.commit()
+        
         return {
             "status": "success",
             "message": f"Course {request.courseId} content refreshed successfully",
-            "num_documents": len(chunks),
+            "total_materials": len(materials),
+            "processed_materials": processed_count,
         }
-    except HTTPException as e:
-        raise e
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error refreshing course: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Query and Chat Endpoints
 
 @app.post("/query")
-async def query_course(request: QueryRequest) -> dict:
-    """
-    Queries the course content using RAG
-    """
-    # Validate request data
-    if not request.courseId:
-        raise HTTPException(status_code=400, detail="courseId is required")
-    if not request.query:
-        raise HTTPException(status_code=400, detail="query is required")
-
-    # Ensure userId is a string
-    userId = str(request.userId) if request.userId else "anonymous"
-
-    if request.courseId not in course_indexes:
-        # Try to load the course content if not in memory
-        try:
-            index, chunks = load_course_content(request.courseId)
-            course_indexes[request.courseId] = (index, chunks)
-        except HTTPException as e:
-            raise e
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    index, chunks = course_indexes[request.courseId]
-
+async def query_course(request: QueryRequest, db: Session = Depends(get_db)):
+    """Query course content using RAG"""
     try:
+        course_uuid = validate_uuid(request.courseId, "course ID")
+        
+        # Verify course exists and has processed materials
+        course = course_repository.get_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        stats = get_course_embedding_stats(course_uuid, db)
+        if stats['total_embeddings'] == 0:
+            raise HTTPException(
+                status_code=404, 
+                detail="No processed materials found for this course"
+            )
+        
         answer = generate_answer(
             query=request.query,
-            index=index,
-            chunks=chunks,
-            userId=userId,
-            courseId=request.courseId,
+            userId=request.userId,
+            courseId=request.courseId
         )
+        
         return {"answer": answer}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error generating answer: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to generate answer")
-
+        logger.error(f"Error processing query: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process query")
 
 @app.post("/chat")
-async def handle_chat(request: ChatMessage) -> dict:
-    """
-    Handles a new chat message and returns the AI response
-    """
-    if request.courseId not in course_indexes:
-        # Try to load the course content if not in memory
-        try:
-            index, chunks = load_course_content(request.courseId)
-            course_indexes[request.courseId] = (index, chunks)
-        except HTTPException as e:
-            raise e
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-    index, chunks = course_indexes[request.courseId]
-
-    # Get chat history for context
-    chat_ref = db.collection("chats")
-    history_query = (
-        chat_ref.where("userId", "==", request.userId)
-        .where("courseId", "==", request.courseId)
-        .order_by("timestamp", direction="DESCENDING")
-        .limit(6)  # Fetch more messages to get pairs
-        .stream()
-    )
-
-    # Collect all messages with type safety
-    messages = []
-    for doc in history_query:
-        try:
-            data = doc.to_dict()
-            # Validate required fields exist
-            if "content" not in data or "sender" not in data or "timestamp" not in data:
-                continue  # Skip invalid documents
-
-            messages.append(
-                {
-                    "content": data.get("content", ""),
-                    "sender": data.get("sender", "user"),
-                    "timestamp": data.get("timestamp", datetime.now(timezone.utc)),
-                    "courseId": data.get("courseId", request.courseId),
-                    "userId": data.get("userId", request.userId),
-                }
-            )
-        except Exception as e:
-            print(f"Error processing chat history document: {str(e)}")
-            continue  # Skip problematic documents
-
-    # Sort by timestamp (oldest first)
-    messages.sort(key=lambda x: x.get("timestamp", 0))
-
-    # Group into conversation pairs
-    chat_history = []
-    i = 0
-    while i < len(messages) - 1:
-        if (
-            messages[i].get("sender") == "user"
-            and messages[i + 1].get("sender") == "ai"
-        ):
-            chat_history.append(
-                {
-                    "user": messages[i].get("content", ""),
-                    "assistant": messages[i + 1].get("content", ""),
-                }
-            )
-            i += 2
-        else:
-            i += 1
-
-    # Limit to last 3 conversation pairs
-    chat_history = chat_history[-3:] if len(chat_history) > 3 else chat_history
-
-    # Generate answer with chat history context
-    answer = generate_answer(
-        query=request.content,  # Use content instead of query
-        index=index,
-        chunks=chunks,
-        userId=request.userId,
-        courseId=request.courseId,
-        chat_history=chat_history,
-    )
-
-    # Store the new conversation in Firebase
+async def handle_chat(request: ChatMessage, db: Session = Depends(get_db)):
+    """Handle chat message and return AI response"""
     try:
-        # Store user message
-        chat_ref.add(
-            {
-                "userId": request.userId,
-                "courseId": request.courseId,
-                "content": request.content,  # Use content instead of query
-                "sender": "user",
-                "timestamp": datetime.now(timezone.utc),
+        course_uuid = validate_uuid(request.courseId, "course ID")
+        
+        # Verify course exists and has processed materials
+        course = course_repository.get_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        stats = get_course_embedding_stats(course_uuid, db)
+        if stats['total_embeddings'] == 0:
+            return {
+                "answer": "I don't have any course materials to reference yet. Please ask your instructor to upload course materials first."
             }
+        
+        answer = generate_answer(
+            query=request.content,
+            userId=request.userId,
+            courseId=request.courseId
         )
-
-        # Store AI response
-        chat_ref.add(
-            {
-                "userId": request.userId,
-                "courseId": request.courseId,
-                "content": answer,
-                "sender": "ai",
-                "timestamp": datetime.now(timezone.utc),
-            }
-        )
+        
+        return {"answer": answer}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error storing chat in Firebase: {str(e)}")
-        # Continue even if storage fails, so the user still gets their answer
-
-    return {"answer": answer}
-
+        logger.error(f"Error handling chat: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process chat message")
 
 @app.get("/chat-history")
 async def get_chat_history(
-    courseId: str, userId: str = "anonymous", limit: int = 10
-) -> dict:
-    """
-    Retrieves chat history for a student in a course
-    """
-    # Validate inputs
-    if not courseId:
-        raise HTTPException(status_code=400, detail="courseId is required")
-
-    # Validate and sanitize userId
-    userId = str(userId) if userId else "anonymous"
-
-    # Validate limit
+    courseId: str, 
+    userId: str = "anonymous", 
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    """Get chat history for a user in a course"""
     try:
-        limit = int(limit)
-        if limit <= 0:
-            limit = 10
-    except (ValueError, TypeError):
-        limit = 10
-
-    # Return empty history for anonymous users
-    if userId == "anonymous":
-        return {"history": []}
-
-    try:
-        chat_ref = db.collection("chats")
-        history_query = (
-            chat_ref.where("userId", "==", userId)
-            .where("courseId", "==", courseId)
-            .order_by("timestamp", direction="ASCENDING")
-            .stream()
+        course_uuid = validate_uuid(courseId, "course ID")
+        
+        if userId == "anonymous":
+            return {"history": []}
+        
+        # Get chat history from database
+        messages = chat_repository.get_chat_history(
+            db, UUID(userId), course_uuid, limit
         )
-
+        
+        # Format for response
         history = []
-        for doc in history_query:
-            try:
-                data = doc.to_dict()
-                # Validate required fields
-                if "content" not in data or "sender" not in data:
-                    continue
-
-                # Format timestamp
-                timestamp = None
-                if data.get("timestamp"):
-                    try:
-                        timestamp = data["timestamp"].isoformat()
-                    except:
-                        timestamp = None
-
-                history.append(
-                    {
-                        "id": doc.id,
-                        "content": str(data.get("content", "")),
-                        "sender": str(data.get("sender", "user")),
-                        "timestamp": timestamp,
-                    }
-                )
-            except Exception as e:
-                print(f"Error processing chat history document: {str(e)}")
-                continue
-
+        for message in reversed(messages):  # Reverse to get chronological order
+            history.append({
+                "id": str(message.id),
+                "content": message.content,
+                "sender": message.sender,
+                "timestamp": message.timestamp.isoformat()
+            })
+        
         return {"history": history}
-
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
     except Exception as e:
-        print(f"Error retrieving chat history: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving chat history: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve chat history")
 
-@app.get("/")
-async def root():
-    return {"message": "Hello from Vansh"}
+# Analytics Endpoints
 
-@app.get("/")
-async def root():
-    return {"message": "Hello from Vansh"}
+@app.get("/courses/{course_id}/analytics")
+async def get_course_analytics(course_id: str, days: int = 30, db: Session = Depends(get_db)):
+    """Get analytics for a course"""
+    course_uuid = validate_uuid(course_id, "course ID")
+    
+    try:
+        activity = chat_repository.get_course_activity(db, course_uuid, days)
+        embedding_stats = get_course_embedding_stats(course_uuid, db)
+        
+        return {
+            "course_id": course_id,
+            "activity": activity,
+            "materials": embedding_stats,
+            "period_days": days
+        }
+    except Exception as e:
+        logger.error(f"Error getting course analytics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get analytics")
 
+# Administrative Endpoints
+
+@app.post("/admin/process-materials")
+async def process_pending_materials():
+    """Process all pending materials (admin endpoint)"""
+    try:
+        processed_count = process_unprocessed_materials()
+        return {
+            "message": f"Processed {processed_count} materials",
+            "processed_count": processed_count
+        }
+    except Exception as e:
+        logger.error(f"Error processing materials: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process materials")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
