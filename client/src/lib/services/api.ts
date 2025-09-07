@@ -5,14 +5,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 export interface Course {
   id: string;
   name: string;
-  code: string;
-  faculty: string;
-  term: "Fall" | "Winter" | "Summer";
+  code: string; // Maps to course_code in backend
+  term: "Fall" | "Winter" | "Summer"; // Maps to semester in backend
   year: number;
   description: string;
   createdAt: string;
   updatedAt: string;
   userId: string;
+  // Note: faculty field removed - not in backend schema
+  // Backend may also include:
+  instructor?: {
+    name: string;
+    email: string;
+  };
 }
 
 export interface Material {
@@ -53,7 +58,17 @@ class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        console.error('API Error Details:', errorData);
+        if (errorData.detail) {
+          errorMessage += ` - ${JSON.stringify(errorData.detail)}`;
+        }
+      } catch (e) {
+        // If we can't parse error response, use the status text
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();
@@ -77,9 +92,28 @@ class ApiService {
   }
 
   async createCourse(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'userId'>): Promise<Course> {
+    const user = getCurrentUser();
+    console.log('Current user data:', user);
+    
+    if (!user?.email) {
+      throw new Error('User not authenticated');
+    }
+    
+    // Map frontend fields to backend expected fields
+    const courseData = {
+      name: course.name,
+      course_code: course.code, // Backend expects 'course_code' not 'code'
+      description: course.description,
+      semester: course.term, // Backend expects 'semester' not 'term'
+      year: course.year,
+      instructor_email: user.email, // Associate course with current instructor
+    };
+
+    console.log('Creating course with data:', courseData);
+
     return this.request<Course>('/courses', {
       method: 'POST',
-      body: JSON.stringify(course),
+      body: JSON.stringify(courseData),
     });
   }
 
@@ -90,9 +124,22 @@ class ApiService {
   }
 
   async updateCourse(courseId: string, updates: Partial<Course>): Promise<Course> {
+    // Map frontend fields to backend expected fields
+    const updateData: any = {};
+    
+    // Map each field that might be updated
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.code !== undefined) updateData.course_code = updates.code;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.term !== undefined) updateData.semester = updates.term; // term -> semester
+    if (updates.year !== undefined) updateData.year = updates.year;
+    
+    // Don't map faculty since it doesn't exist in backend
+    // Don't try to update instructor_email via this endpoint
+
     return this.request<Course>(`/courses/${courseId}`, {
       method: 'PUT',
-      body: JSON.stringify(updates),
+      body: JSON.stringify(updateData),
     });
   }
 
@@ -104,13 +151,22 @@ class ApiService {
   async uploadMaterial(courseId: string, file: File): Promise<Material> {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('course_id', courseId);
-
+    formData.append('courseId', courseId); // Backend expects 'courseId' not 'course_id'
+    
     const user = getCurrentUser();
-    const headers: Record<string, string> = {};
     if (user) {
-      headers.Authorization = `Bearer ${user.userId}`;
+      formData.append('userId', user.userId); // Add userId for authentication
     }
+
+    const headers: Record<string, string> = {};
+    // Note: Don't set Authorization header for multipart/form-data, use form fields
+
+    console.log('Uploading file:', {
+      fileName: file.name,
+      fileSize: file.size,
+      courseId,
+      userId: user?.userId
+    });
 
     const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
@@ -119,7 +175,17 @@ class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      let errorDetail = `${response.status} ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        console.error('Upload error details:', errorData);
+        if (errorData.detail) {
+          errorDetail = JSON.stringify(errorData.detail);
+        }
+      } catch (e) {
+        // If we can't parse the error response, use the status text
+      }
+      throw new Error(`Upload failed: ${errorDetail}`);
     }
 
     return response.json();
@@ -152,10 +218,15 @@ class ApiService {
   }
 
   // User operations
-  async createUser(userData: { email: string; displayName: string; role: string }): Promise<Record<string, unknown>> {
+  async createUser(userData: { email: string; displayName?: string; name?: string; role: string }): Promise<Record<string, unknown>> {
+    const backendUserData = {
+      email: userData.email,
+      name: userData.displayName || userData.name || '',
+      role: userData.role
+    };
     return this.request('/users', {
       method: 'POST',
-      body: JSON.stringify(userData),
+      body: JSON.stringify(backendUserData),
     });
   }
 
