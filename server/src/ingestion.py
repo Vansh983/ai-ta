@@ -138,23 +138,45 @@ def ingest_course_material(material_id: UUID, course_id: UUID) -> bool:
             db.commit()  # Commit status change
             logger.info("Status updated to processing")
             
+            # Check if S3 key exists and is valid
+            if not material.s3_key:
+                raise ValueError("Material has no S3 key - file may not have been uploaded properly")
+            
             # Download file content from S3
             logger.info(f"Downloading and extracting text from S3 key: {material.s3_key}")
-            doc_text = course_file_service.download_and_extract_text(material.s3_key)
-            if not doc_text:
-                raise ValueError("Could not extract text from the file")
-            logger.info(f"Successfully extracted {len(doc_text)} characters of text")
+            try:
+                doc_text = course_file_service.download_and_extract_text(material.s3_key)
+                if not doc_text:
+                    raise ValueError("Could not extract text from the file - file may be corrupted or empty")
+                if len(doc_text.strip()) == 0:
+                    raise ValueError("Extracted text is empty - file may be corrupted")
+                logger.info(f"Successfully extracted {len(doc_text)} characters of text")
+            except Exception as s3_error:
+                logger.error(f"S3 download/extraction failed for {material.s3_key}: {s3_error}")
+                raise ValueError(f"Failed to download or extract text from S3: {s3_error}")
             
             # Process the document
             logger.info("Starting document processing...")
-            success = process_document_content(doc_text, material_id, course_id, db)
-            db.commit()  # Commit processing results
-            logger.info(f"Document processing completed with success: {success}")
-            
-            return success
+            try:
+                success = process_document_content(doc_text, material_id, course_id, db)
+                db.commit()  # Commit processing results
+                logger.info(f"Document processing completed with success: {success}")
+                return success
+            except Exception as processing_error:
+                logger.error(f"Document processing failed: {processing_error}")
+                raise ValueError(f"Document processing failed: {processing_error}")
             
         except Exception as e:
             logger.error(f"Error ingesting material {material_id}: {e}")
+            # Update material status to failed
+            try:
+                material_repository.update_processing_status(
+                    db, material_id, 'failed', is_processed=False,
+                    metadata={'error': str(e), 'failed_at': datetime.now(timezone.utc).isoformat()}
+                )
+                db.commit()
+            except Exception as update_error:
+                logger.error(f"Failed to update material status after error: {update_error}")
             db.rollback()
             return False
 

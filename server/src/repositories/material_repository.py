@@ -24,6 +24,7 @@ class MaterialRepository(BaseRepository[CourseMaterial]):
         uploaded_by: UUID,
         file_name: str,
         s3_key: str,
+        s3_url: str = None,
         file_size: int = None,
         file_type: str = None,
         mime_type: str = None,
@@ -37,10 +38,11 @@ class MaterialRepository(BaseRepository[CourseMaterial]):
                 uploaded_by=uploaded_by,
                 file_name=file_name,
                 s3_key=s3_key,
+                s3_url=s3_url,
                 file_size=file_size,
                 file_type=file_type,
                 mime_type=mime_type,
-                metadata=metadata or {}
+                meta_data=metadata or {}
             )
         except SQLAlchemyError as e:
             logger.error(f"Error creating material: {e}")
@@ -95,9 +97,12 @@ class MaterialRepository(BaseRepository[CourseMaterial]):
                 
                 if metadata:
                     # Merge with existing metadata
-                    existing_metadata = material.metadata or {}
-                    existing_metadata.update(metadata)
-                    update_data["metadata"] = existing_metadata
+                    existing_metadata = material.meta_data or {}
+                    if isinstance(existing_metadata, dict):
+                        existing_metadata.update(metadata)
+                    else:
+                        existing_metadata = metadata
+                    update_data["meta_data"] = existing_metadata
                 
                 return self.update(db, material, **update_data)
             return None
