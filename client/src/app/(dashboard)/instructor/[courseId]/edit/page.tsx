@@ -3,9 +3,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { apiService, type Course } from "@/lib/services/api";
+import DocumentUpload from "@/components/DocumentUpload";
+import DocumentList from "@/components/DocumentList";
+import { apiService, type Course, type Material } from "@/lib/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
+import { toast } from "sonner";
 
 export default function EditCoursePage() {
   const { user } = useAuth();
@@ -14,8 +17,10 @@ export default function EditCoursePage() {
   const courseId = params.courseId as string;
 
   const [course, setCourse] = useState<Course | null>(null);
+  const [documents, setDocuments] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
   // Form state
@@ -35,22 +40,32 @@ export default function EditCoursePage() {
 
       try {
         setLoading(true);
-        const courseData = await apiService.getCourse(courseId);
+        
+        // Fetch course and documents in parallel
+        const [courseData, courseDocuments] = await Promise.all([
+          apiService.getCourse(courseId),
+          apiService.getCourseMaterials(courseId),
+        ]);
 
-        // Check if user owns this course
-        if (courseData.userId !== user.uid) {
+        // Check if user owns this course - use instructor email or userId
+        const hasEmailPermission = courseData.instructor?.email === user.email;
+        const hasUserIdPermission = courseData.userId === user.uid;
+        
+        if (!hasEmailPermission && !hasUserIdPermission) {
           setError("You don't have permission to edit this course.");
           return;
         }
 
         setCourse(courseData);
+        setDocuments(courseDocuments);
 
         // Populate form fields
         setCourseName(courseData.name);
         setCourseCode(courseData.code);
-        setCourseFaculty(courseData.faculty);
-        setCourseTerm(courseData.term);
-        setCourseYear(courseData.year);
+        // Faculty field doesn't exist in Course interface - use instructor name or default
+        setCourseFaculty(courseData.instructor?.name || '');
+        setCourseTerm(courseData.term || 'Fall');
+        setCourseYear(courseData.year || new Date().getFullYear());
         setCourseDescription(courseData.description);
 
         setError("");
@@ -65,30 +80,68 @@ export default function EditCoursePage() {
     fetchCourse();
   }, [user, courseId]);
 
+  const handleDocumentUpload = async (document: Material | File) => {
+    if (!user || !courseId) return;
+
+    try {
+      setUploading(true);
+
+      // If it's a File, upload it. If it's already a Document, just add it to the list
+      if (document instanceof File) {
+        const uploadedDocument = await apiService.uploadMaterial(
+          courseId,
+          document
+        );
+        setDocuments((prev) => [uploadedDocument, ...prev]);
+        toast.success(`Document "${document.name}" uploaded successfully!`, {
+          description: "The document is now available for your course."
+        });
+      } else {
+        // It's already a Document, just add it to the list
+        setDocuments((prev) => [document, ...prev]);
+        toast.success("Document added successfully!");
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to upload document";
+      setError(errorMessage);
+      toast.error("Upload failed", {
+        description: errorMessage
+      });
+      console.error("Error uploading document:", err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleUpdateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !course) return;
 
-    if (courseName && courseCode && courseFaculty && courseDescription) {
+    if (courseName && courseCode && courseDescription) {
       try {
         setSaving(true);
         const courseData = {
           name: courseName,
           code: courseCode,
-          faculty: courseFaculty,
           term: courseTerm,
           year: courseYear,
           description: courseDescription,
         };
 
         await apiService.updateCourse(courseId, courseData);
+        
+        toast.success("Course updated successfully!", {
+          description: "Your changes have been saved."
+        });
 
         // Redirect back to course detail page
         router.push(`/instructor/${courseId}`);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to update course"
-        );
+        const errorMessage = err instanceof Error ? err.message : "Failed to update course";
+        setError(errorMessage);
+        toast.error("Failed to update course", {
+          description: errorMessage
+        });
         console.error("Error updating course:", err);
       } finally {
         setSaving(false);
@@ -295,7 +348,6 @@ export default function EditCoursePage() {
                     saving ||
                     !courseName ||
                     !courseCode ||
-                    !courseFaculty ||
                     !courseDescription
                   }
                 >
@@ -313,24 +365,53 @@ export default function EditCoursePage() {
               </div>
             </form>
           </div>
+        </div>
 
-          <div className='mt-6 p-4 bg-gray-800/50 rounded-lg border border-gray-700'>
-            <div className='flex items-center space-x-2 text-gray-400 text-sm'>
-              <svg className='w-4 h-4' fill='currentColor' viewBox='0 0 20 20'>
-                <path
-                  fillRule='evenodd'
-                  d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z'
-                  clipRule='evenodd'
-                />
-              </svg>
-              <span>
-                Course documents are managed separately. Visit the course page
-                to upload or manage documents.
-              </span>
+        {/* Documents Section - Moved outside form */}
+        <div className='max-w-4xl mt-8 space-y-6'>
+            <div className='p-6 rounded-lg border border-gray-700'>
+              <h2 className='text-xl font-semibold mb-4 text-white'>
+                Course Documents
+              </h2>
+              <p className='text-gray-400 text-sm mb-4'>
+                Manage your course materials. Upload PDFs like syllabus, lecture notes, assignments, and other relevant documents.
+              </p>
+              
+              <DocumentUpload
+                courseId={courseId}
+                userId={user.uid}
+                onUploadComplete={handleDocumentUpload}
+                isPending={false}
+              />
+
+              {uploading && (
+                <div className='mt-4 p-3 bg-blue-900/50 text-blue-200 rounded-md border border-blue-800'>
+                  Uploading document...
+                </div>
+              )}
+            </div>
+
+            <div className='p-6 rounded-lg border border-gray-700'>
+              <div className='flex items-center justify-between mb-4'>
+                <h3 className='text-lg font-semibold text-white'>
+                  Uploaded Documents
+                </h3>
+                <span className='text-gray-400 text-sm'>
+                  {documents.length} document{documents.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              <DocumentList
+                courseId={courseId}
+                userId={user.uid}
+                onDocumentDeleted={() => {
+                  // Refresh documents list when a document is deleted
+                  apiService.getCourseMaterials(courseId).then(setDocuments);
+                }}
+              />
             </div>
           </div>
         </div>
-      </div>
-    </RequireAuth>
+      </RequireAuth>
   );
 }

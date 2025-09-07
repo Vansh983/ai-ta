@@ -13,10 +13,15 @@ logger = logging.getLogger(__name__)
 class S3Client:
     def __init__(self):
         self.bucket_name = os.getenv("S3_BUCKET_NAME", "ai-ta-storage")
-        self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID", "test")
-        self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY", "test")
-        self.aws_region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-        self.endpoint_url = os.getenv("AWS_ENDPOINT_URL")  # For LocalStack
+        self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+        self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+        self.aws_region = os.getenv("AWS_DEFAULT_REGION", "ca-central-1")
+        self.endpoint_url = os.getenv("AWS_ENDPOINT_URL")  # For LocalStack testing only
+        
+        # Validate required credentials
+        if not self.aws_access_key_id or not self.aws_secret_access_key:
+            logger.warning("AWS credentials not found in environment variables")
+            # Don't raise an error here - let boto3 handle credential discovery
         
         self._client = None
         self._initialize_client()
@@ -24,20 +29,35 @@ class S3Client:
     def _initialize_client(self):
         """Initialize the S3 client"""
         try:
-            # Configuration for LocalStack or AWS
+            # Configuration for AWS S3
             config = Config(
                 signature_version='s3v4',
-                s3={'addressing_style': 'path'}  # Required for LocalStack
+                # Remove LocalStack-specific addressing_style
             )
             
-            self._client = boto3.client(
-                's3',
-                aws_access_key_id=self.aws_access_key_id,
-                aws_secret_access_key=self.aws_secret_access_key,
-                region_name=self.aws_region,
-                endpoint_url=self.endpoint_url,
-                config=config
-            )
+            # Only set endpoint_url if explicitly provided (for testing/LocalStack)
+            client_kwargs = {
+                'region_name': self.aws_region,
+                'config': config
+            }
+            
+            # Only set credentials if they are provided
+            # This allows boto3 to use other credential sources (IAM roles, profile, etc.)
+            if self.aws_access_key_id and self.aws_secret_access_key:
+                client_kwargs['aws_access_key_id'] = self.aws_access_key_id
+                client_kwargs['aws_secret_access_key'] = self.aws_secret_access_key
+            
+            # Only add endpoint_url if it's set (for LocalStack/testing)
+            if self.endpoint_url:
+                client_kwargs['endpoint_url'] = self.endpoint_url
+                # Re-add path addressing for LocalStack if endpoint_url is set
+                config = Config(
+                    signature_version='s3v4',
+                    s3={'addressing_style': 'path'}
+                )
+                client_kwargs['config'] = config
+            
+            self._client = boto3.client('s3', **client_kwargs)
             
             # Test connection and create bucket if it doesn't exist
             self._ensure_bucket_exists()
@@ -56,8 +76,8 @@ class S3Client:
             if error_code == '404':
                 # Bucket doesn't exist, create it
                 try:
-                    if self.aws_region == 'us-east-1':
-                        # For us-east-1, don't specify location constraint
+                    if self.aws_region == 'ca-central-1':
+                        # For ca-central-1, don't specify location constraint
                         self._client.create_bucket(Bucket=self.bucket_name)
                     else:
                         self._client.create_bucket(
