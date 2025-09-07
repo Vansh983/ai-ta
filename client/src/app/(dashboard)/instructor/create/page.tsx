@@ -19,7 +19,6 @@ export default function CreateCoursePage() {
   const [error, setError] = useState("");
   const [courseName, setCourseName] = useState("");
   const [courseCode, setCourseCode] = useState("");
-  const [courseFaculty, setCourseFaculty] = useState("");
   const [courseTerm, setCourseTerm] = useState<"Fall" | "Winter" | "Summer">(
     "Fall"
   );
@@ -34,13 +33,12 @@ export default function CreateCoursePage() {
     e.preventDefault();
     if (!user) return;
 
-    if (courseName && courseCode && courseFaculty && courseDescription) {
+    if (courseName && courseCode && courseDescription) {
       try {
         setCreating(true);
         const courseData = {
           name: courseName,
           code: courseCode,
-          faculty: courseFaculty,
           term: courseTerm,
           year: courseYear,
           description: courseDescription,
@@ -51,10 +49,25 @@ export default function CreateCoursePage() {
 
         // Upload all pending documents
         if (pendingDocuments.length > 0) {
-          const uploadPromises = pendingDocuments.map((pendingDoc) =>
-            apiService.uploadMaterial(newCourse.id, pendingDoc.file)
-          );
-          await Promise.all(uploadPromises);
+          console.log(`Uploading ${pendingDocuments.length} documents...`);
+          const uploadPromises = pendingDocuments.map(async (pendingDoc) => {
+            try {
+              await apiService.uploadMaterial(newCourse.id, pendingDoc.file);
+              return { success: true, fileName: pendingDoc.name };
+            } catch (error) {
+              console.error(`Failed to upload ${pendingDoc.name}:`, error);
+              return { success: false, fileName: pendingDoc.name, error };
+            }
+          });
+          
+          const uploadResults = await Promise.all(uploadPromises);
+          const failedUploads = uploadResults.filter(result => !result.success);
+          
+          if (failedUploads.length > 0) {
+            const failedFileNames = failedUploads.map(result => result.fileName).join(', ');
+            setError(`Course created successfully, but failed to upload some documents: ${failedFileNames}. You can upload them later from the course page.`);
+            console.warn('Failed uploads:', failedUploads);
+          }
         }
 
         // Redirect to the new course page
@@ -147,19 +160,6 @@ export default function CreateCoursePage() {
                   />
                 </div>
 
-                <div>
-                  <label className='block text-sm font-medium mb-1 text-gray-300'>
-                    Faculty
-                  </label>
-                  <input
-                    type='text'
-                    value={courseFaculty}
-                    onChange={(e) => setCourseFaculty(e.target.value)}
-                    className='w-full p-2 bg-[#343541] border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#19C37D] focus:border-transparent'
-                    placeholder='e.g., Computer Science'
-                    required
-                  />
-                </div>
 
                 <div className='grid grid-cols-2 gap-4'>
                   <div>
@@ -218,7 +218,6 @@ export default function CreateCoursePage() {
                       creating ||
                       !courseName ||
                       !courseCode ||
-                      !courseFaculty ||
                       !courseDescription
                     }
                   >

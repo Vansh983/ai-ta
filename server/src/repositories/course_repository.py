@@ -82,11 +82,7 @@ class CourseRepository(BaseRepository[Course]):
     ) -> Course:
         """Create a new course"""
         try:
-            # Check if course code already exists
-            existing_course = self.get_by_code(db, course_code)
-            if existing_course:
-                raise ValueError(f"Course with code {course_code} already exists")
-
+            # Allow duplicate course codes - removed uniqueness check
             return self.create(
                 db,
                 course_code=course_code,

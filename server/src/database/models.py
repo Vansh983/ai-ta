@@ -58,7 +58,7 @@ class Course(Base):
     __tablename__ = 'courses'
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    course_code = Column(String(50), unique=True)
+    course_code = Column(String(50))
     name = Column(String(255), nullable=False)
     description = Column(Text)
     instructor_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'))

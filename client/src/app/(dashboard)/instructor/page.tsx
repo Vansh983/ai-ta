@@ -335,10 +335,6 @@ export default function InstructorDashboard() {
                       </span>
                     </div>
                     <div className='flex items-center justify-between'>
-                      <span>Faculty:</span>
-                      <span className='text-gray-300'>{course.faculty}</span>
-                    </div>
-                    <div className='flex items-center justify-between'>
                       <span>Documents:</span>
                       <span className='text-gray-300'>
                         {Math.floor(Math.random() * 10)}
