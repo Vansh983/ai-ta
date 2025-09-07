@@ -64,12 +64,13 @@ CREATE TABLE course_materials (
     file_name VARCHAR(255) NOT NULL,
     file_type VARCHAR(50),
     s3_key VARCHAR(512) UNIQUE NOT NULL,
+    s3_url VARCHAR(2048),  -- Presigned URL for file access
     file_size BIGINT,
     mime_type VARCHAR(100),
     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_processed BOOLEAN DEFAULT FALSE,
     processing_status processing_status DEFAULT 'pending',
-    metadata JSONB DEFAULT '{}'::jsonb
+    meta_data JSONB DEFAULT '{}'::jsonb
 );
 
 -- Create chat_sessions table

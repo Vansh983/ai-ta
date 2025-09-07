@@ -20,9 +20,10 @@ This is a microservices architecture with separate frontend and backend services
 
 ### Backend (`server/`)  
 - **Framework**: FastAPI with Python 3.10+
-- **AI Integration**: OpenAI API for chat functionality
-- **Vector Search**: FAISS for document retrieval
-- **Database**: Firebase Firestore
+- **AI Integration**: OpenAI API for chat functionality and embeddings
+- **Vector Search**: pgvector for document retrieval and similarity search
+- **Database**: PostgreSQL with pgvector extension (runs in Docker)
+- **File Storage**: AWS S3 for course materials
 - **File Processing**: PyPDF2 for document ingestion
 
 ## Development Commands
@@ -73,9 +74,10 @@ cd server && docker-compose -f docker/docker-compose.yml up
 - `uploads/` - File storage directory for course materials
 
 ### Data Flow
-1. Documents uploaded through client → processed in `ingestion.py` → stored with FAISS vectors
-2. User queries → `chat.py` → retrieval from vector store → OpenAI processing → response
-3. Firebase handles user authentication and course metadata storage
+1. Documents uploaded through client → stored in S3 → processed in `ingestion.py` → embeddings stored in pgvector
+2. User queries → `chat.py` → retrieval from pgvector → OpenAI processing → response
+3. Firebase handles user authentication
+4. PostgreSQL stores course data, materials metadata, embeddings, and chat history
 
 ## Environment Setup
 
@@ -88,6 +90,41 @@ Both client and server require environment configuration:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - FastAPI docs: http://localhost:8000/docs
+
+## Database Management
+
+### PostgreSQL with pgvector (Docker)
+The database runs in a Docker container with the following configuration:
+- **Container**: `ai-ta-postgres` 
+- **Database**: `ai_ta`
+- **User**: `ai_ta_user` 
+- **Password**: `ai_ta_password`
+- **Port**: `5432` (mapped to host)
+
+### Database Commands
+```bash
+# Connect to PostgreSQL in Docker container (interactive)
+docker exec -it ai-ta-postgres psql -U ai_ta_user -d ai_ta
+
+# Run SQL commands (non-interactive, for scripts)
+docker exec ai-ta-postgres psql -U ai_ta_user -d ai_ta -c "SELECT COUNT(*) FROM course_materials;"
+
+# Run migrations or schema changes
+docker exec ai-ta-postgres psql -U ai_ta_user -d ai_ta -c "ALTER TABLE course_materials ADD COLUMN s3_url VARCHAR(2048);"
+
+# Backup database
+docker exec ai-ta-postgres pg_dump -U ai_ta_user ai_ta > backup.sql
+
+# View database logs
+docker logs ai-ta-postgres
+```
+
+### Key Tables
+- `users` - User accounts and authentication
+- `courses` - Course information and metadata
+- `course_materials` - Uploaded file metadata and S3 references
+- `vector_embeddings` - Document embeddings for similarity search (pgvector)
+- `chat_sessions` / `chat_messages` - Chat history and conversations
 
 ## Testing
 Currently no test suite is implemented. Tests should be added in `server/tests/` when implemented.

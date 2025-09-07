@@ -115,6 +115,7 @@ class CourseMaterial(Base):
     file_name = Column(String(255), nullable=False)
     file_type = Column(String(50))
     s3_key = Column(String(512), unique=True, nullable=False, index=True)
+    s3_url = Column(String(2048))  # Presigned URL for file access
     file_size = Column(BigInteger)
     mime_type = Column(String(100))
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())

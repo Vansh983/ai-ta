@@ -126,6 +126,7 @@ def generate_answer(
     userId: str = "anonymous",
     courseId: str = "",
     chat_history: Optional[List[Dict[str, str]]] = None,
+    use_fallback: bool = False,  # New parameter for fallback mode
 ) -> str:
     """Generate answer using PostgreSQL-based retrieval and chat history"""
     
@@ -155,17 +156,50 @@ def generate_answer(
             chat_history = validated_history
 
             # Retrieve relevant chunks using new PostgreSQL-based retrieval
-            try:
-                retrieval_result = retrieve_with_context(query, course_uuid, k=5, db=db)
-                context_chunks = retrieval_result['chunks']
-                materials_used = retrieval_result['materials_used']
-            except Exception as e:
-                logger.error(f"Error during retrieval: {e}")
-                context_chunks = []
-                materials_used = []
+            context_chunks = []
+            materials_used = []
+            
+            if use_fallback:
+                logger.info("Using fallback mode - retrieving material content directly from S3")
+                # Fallback: Get material content directly without vector search
+                try:
+                    from .repositories.material_repository import material_repository
+                    from .storage.file_operations import course_file_service
+                    
+                    # Get processed materials for this course
+                    materials = material_repository.get_course_materials(db, course_uuid, include_processed_only=True)
+                    
+                    for material in materials[:3]:  # Limit to first 3 materials
+                        try:
+                            if material.s3_key:
+                                doc_text = course_file_service.download_and_extract_text(material.s3_key)
+                                if doc_text:
+                                    # Take first 2000 characters as context
+                                    context_chunks.append(doc_text[:2000] + "...")
+                                    materials_used.append(material.file_name)
+                        except Exception as material_error:
+                            logger.warning(f"Could not retrieve content from {material.file_name}: {material_error}")
+                            continue
+                    
+                    if not context_chunks:
+                        return "I found course materials but couldn't access their content. Please contact your instructor for assistance."
+                        
+                except Exception as fallback_error:
+                    logger.error(f"Fallback retrieval failed: {fallback_error}")
+                    return "I'm currently unable to access the course materials. Please contact your instructor for assistance."
+            else:
+                # Normal vector-based retrieval
+                try:
+                    retrieval_result = retrieve_with_context(query, course_uuid, k=5, db=db)
+                    context_chunks = retrieval_result['chunks']
+                    materials_used = retrieval_result['materials_used']
+                except Exception as e:
+                    logger.error(f"Error during retrieval: {e}")
+                    context_chunks = []
+                    materials_used = []
 
-            if not context_chunks:
-                return "I'm sorry, I couldn't find relevant information in the course materials to answer your question. Please try rephrasing your question or consult your course instructor."
+                if not context_chunks:
+                    return "I'm sorry, I couldn't find relevant information in the course materials to answer your question. Please try rephrasing your question or consult your course instructor."
 
             context = "\n\n".join(context_chunks)
 
@@ -180,7 +214,8 @@ def generate_answer(
                 )
 
             # Build the system message with teaching guidelines
-            system_message = """You are a knowledgeable and supportive teaching assistant for a university course. Your responses must adhere to these principles:
+            fallback_note = " (Note: The system is currently using a basic content retrieval mode.)" if use_fallback else ""
+            system_message = f"""You are a knowledgeable and supportive teaching assistant for a university course{fallback_note}. Your responses must adhere to these principles:
 
 1. Only use information from the provided course materials in your answers
 2. If you cannot find relevant information in the context, acknowledge this and suggest the student consult the course instructor

@@ -453,8 +453,13 @@ async def upload_file(
         if not s3_key:
             raise HTTPException(status_code=500, detail="Failed to upload file to storage")
         
-        # Update material with S3 key
-        material_repository.update(db, material, s3_key=s3_key)
+        # Generate presigned URL for file access
+        presigned_url = course_file_service.generate_presigned_url(
+            s3_key, expiration=7*24*3600  # 7 days
+        )
+        
+        # Update material with S3 key and URL
+        material_repository.update(db, material, s3_key=s3_key, s3_url=presigned_url)
         db.commit()
         
         # Process the document asynchronously (in real app, use task queue)
@@ -506,6 +511,7 @@ async def list_course_materials(course_id: str, db: Session = Depends(get_db)):
                 "file_name": material.file_name,
                 "file_type": material.file_type,
                 "file_size": material.file_size,
+                "s3_url": material.s3_url,
                 "uploaded_at": material.uploaded_at.isoformat(),
                 "is_processed": material.is_processed,
                 "processing_status": material.processing_status,
@@ -612,24 +618,38 @@ async def handle_chat(request: ChatMessage, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Course not found")
         
         stats = get_course_embedding_stats(course_uuid, db)
+        
+        # Check if materials exist regardless of embeddings
+        materials = material_repository.get_course_materials(db, course_uuid)
+        if not materials:
+            return {
+                "answer": "I don't have any course materials to reference yet. Please ask your instructor to upload course materials first."
+            }
+        
+        # Check processing status
+        unprocessed_count = sum(1 for m in materials if not m.is_processed)
+        if unprocessed_count > 0:
+            return {
+                "answer": f"I found {len(materials)} course materials, but {unprocessed_count} are still being processed. Please try asking your question again in a few moments, or contact your instructor if this persists."
+            }
+        
+        # If no embeddings but materials are processed, use fallback mode
         if stats['total_embeddings'] == 0:
-            # Check if there are unprocessed materials that could be processed
-            materials = material_repository.get_course_materials(db, course_uuid)
-            if not materials:
+            logger.info(f"No embeddings found for course {course_uuid}, using fallback mode")
+            # Try to generate answer with fallback retrieval (no vector search)
+            try:
+                answer = generate_answer(
+                    query=request.content,
+                    userId=request.userId,
+                    courseId=request.courseId,
+                    use_fallback=True  # Flag to indicate fallback mode
+                )
+                return {"answer": answer}
+            except Exception as e:
+                logger.error(f"Fallback chat generation failed: {e}")
                 return {
-                    "answer": "I don't have any course materials to reference yet. Please ask your instructor to upload course materials first."
+                    "answer": "I found course materials but the system is currently unable to process them for search. Please contact your instructor for assistance, or try a simple question about the course content."
                 }
-            else:
-                # Materials exist but not processed - check processing status
-                unprocessed_count = sum(1 for m in materials if not m.is_processed)
-                if unprocessed_count > 0:
-                    return {
-                        "answer": f"I found {len(materials)} course materials, but {unprocessed_count} are still being processed. Please try asking your question again in a few moments, or contact your instructor if this persists."
-                    }
-                else:
-                    return {
-                        "answer": "I found course materials but there was an issue processing them. Please contact your instructor for assistance."
-                    }
         
         answer = generate_answer(
             query=request.content,
@@ -1018,6 +1038,181 @@ async def trigger_course_processing(
     except Exception as e:
         logger.error(f"Error triggering course processing: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/reset-processing-status")
+async def reset_processing_status(
+    course_id: Optional[str] = None,
+    current_user: User = Depends(require_instructor),
+    db: Session = Depends(get_db)
+):
+    """Reset materials stuck in 'processing' status back to 'pending'"""
+    try:
+        results = {"reset_count": 0, "materials": []}
+        
+        # Build query to find stuck materials
+        query = db.query(material_repository.model).filter(
+            material_repository.model.processing_status.in_(['processing', 'failed']),
+            material_repository.model.is_processed == False
+        )
+        
+        # Filter by course if specified
+        if course_id:
+            course_uuid = validate_uuid(course_id, "course ID")
+            query = query.filter(material_repository.model.course_id == course_uuid)
+        
+        stuck_materials = query.all()
+        
+        # Reset each material
+        for material in stuck_materials:
+            # Reset to pending status
+            reset_metadata = {'reset_at': datetime.now(timezone.utc).isoformat(), 'reset_reason': 'stuck_processing'}
+            material_repository.update_processing_status(
+                db, material.id, 'pending', is_processed=False,
+                metadata=reset_metadata
+            )
+            
+            results["materials"].append({
+                "id": str(material.id),
+                "file_name": material.file_name,
+                "course_id": str(material.course_id)
+            })
+            results["reset_count"] += 1
+        
+        db.commit()
+        
+        return {
+            "message": f"Reset {results['reset_count']} materials from processing to pending status",
+            "results": results
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error resetting processing status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/material-debug/{material_id}")
+async def material_debug_info(
+    material_id: str,
+    current_user: User = Depends(require_instructor),
+    db: Session = Depends(get_db)
+):
+    """Get detailed debug information about a material"""
+    try:
+        material_uuid = validate_uuid(material_id, "material ID")
+        material = material_repository.get_by_id(db, material_uuid)
+        
+        if not material:
+            raise HTTPException(status_code=404, detail="Material not found")
+        
+        # Get basic info
+        debug_info = {
+            "material": {
+                "id": str(material.id),
+                "file_name": material.file_name,
+                "s3_key": material.s3_key,
+                "processing_status": material.processing_status,
+                "is_processed": material.is_processed,
+                "meta_data": material.meta_data
+            }
+        }
+        
+        # Test S3 file existence
+        try:
+            if material.s3_key:
+                file_exists = course_file_service.file_exists(material.s3_key)
+                debug_info["s3_file_exists"] = file_exists
+                
+                if file_exists:
+                    # Try to get file metadata
+                    try:
+                        metadata = course_file_service.get_file_metadata(material.s3_key)
+                        debug_info["s3_metadata"] = metadata
+                    except Exception as meta_error:
+                        debug_info["s3_metadata_error"] = str(meta_error)
+                        
+                    # Try to download a small portion
+                    try:
+                        file_data = course_file_service.download_file(material.s3_key)
+                        if file_data:
+                            debug_info["s3_file_size_bytes"] = len(file_data)
+                            debug_info["s3_first_100_bytes"] = file_data[:100].hex()
+                        else:
+                            debug_info["s3_download_result"] = "None returned"
+                    except Exception as download_error:
+                        debug_info["s3_download_error"] = str(download_error)
+                        
+            else:
+                debug_info["s3_key_missing"] = True
+        except Exception as s3_error:
+            debug_info["s3_check_error"] = str(s3_error)
+            
+        # Test OpenAI connection
+        try:
+            from src.ingestion import get_embedding
+            test_embedding = get_embedding("test text")
+            debug_info["openai_test"] = {
+                "status": "OK",
+                "embedding_dimensions": len(test_embedding)
+            }
+        except Exception as openai_error:
+            debug_info["openai_test"] = {
+                "status": "ERROR",
+                "error": str(openai_error)
+            }
+            
+        return debug_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting material debug info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/openai-version")
+async def check_openai_version(current_user: User = Depends(require_instructor)):
+    """Check OpenAI package version and test basic functionality"""
+    try:
+        import openai
+        from config.config import OPENAI_API_KEY
+        
+        version_info = {
+            "openai_version": getattr(openai, "__version__", "unknown"),
+            "api_key_configured": bool(OPENAI_API_KEY and len(OPENAI_API_KEY) > 10)
+        }
+        
+        # Try creating client with minimal args
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            version_info["client_creation"] = "success"
+            
+            # Try simple embedding call
+            try:
+                response = client.embeddings.create(
+                    input="hello world",
+                    model="text-embedding-3-large"
+                )
+                version_info["embedding_test"] = {
+                    "status": "success", 
+                    "dimensions": len(response.data[0].embedding)
+                }
+            except Exception as embed_error:
+                version_info["embedding_test"] = {
+                    "status": "error",
+                    "error": str(embed_error)
+                }
+                
+        except Exception as client_error:
+            version_info["client_creation"] = {
+                "status": "error",
+                "error": str(client_error)
+            }
+            
+        return version_info
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
