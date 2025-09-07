@@ -23,20 +23,18 @@ export function MainNav() {
       if (authLoading || !user) return;
 
       try {
-        const coursesData = await apiService.getCourses();
+        // Use role-appropriate API call
+        const coursesData = user.role === "instructor" 
+          ? await apiService.getInstructorCourses()
+          : await apiService.getCourses();
+        
         console.log("Raw courses data:", coursesData, "Type:", typeof coursesData);
 
         // Ensure coursesData is an array
         const coursesArray = Array.isArray(coursesData) ? coursesData : [];
 
-        // Filter courses based on user role
-        const filteredCourses =
-          user.role === "instructor"
-            ? coursesArray.filter((course) => course.userId === user.uid)
-            : coursesArray;
-
-        console.log("Filtered courses:", filteredCourses);
-        setCourses(filteredCourses);
+        console.log("Filtered courses:", coursesArray);
+        setCourses(coursesArray);
       } catch (error) {
         console.error("Error fetching courses:", error);
         toast.error("Failed to fetch courses");

@@ -1,17 +1,20 @@
-import openai
+from openai import OpenAI
 from config.config import OPENAI_API_KEY
 from typing import List, Dict, Optional, Any
 from uuid import UUID
 import logging
 from sqlalchemy.orm import Session
 
-from .database.connection import get_db_session
+from .database.connection import get_database_session
 from .repositories.chat_repository import chat_repository
 from .repositories.user_repository import user_repository
 from .retrieval import retrieve_chunks_text, retrieve_with_context
 
-openai.api_key = OPENAI_API_KEY
 logger = logging.getLogger(__name__)
+
+def _get_openai_client():
+    """Get OpenAI client instance"""
+    return OpenAI(api_key=OPENAI_API_KEY)
 
 
 def store_conversation_in_db(
@@ -69,7 +72,7 @@ def store_conversation_in_db(
 
 def store_conversation(user_id: str, course_id: str, query: str, answer: str) -> None:
     """Store a conversation entry - standalone version"""
-    with get_db_session() as db:
+    with get_database_session() as db:
         store_conversation_in_db(db, user_id, course_id, query, answer)
 
 
@@ -112,7 +115,7 @@ def get_conversation_history(
     user_id: str, course_id: str, limit: int = 3
 ) -> List[Dict[str, str]]:
     """Retrieves recent conversation history - standalone version"""
-    with get_db_session() as db:
+    with get_database_session() as db:
         return get_conversation_history_from_db(db, user_id, course_id, limit)
 
 
@@ -126,7 +129,7 @@ def generate_answer(
 ) -> str:
     """Generate answer using PostgreSQL-based retrieval and chat history"""
     
-    with get_db_session() as db:
+    with get_database_session() as db:
         try:
             # Convert courseId to UUID
             try:
@@ -211,13 +214,14 @@ Remember to follow the teaching principles in your response.""",
                 },
             ]
 
-            response = openai.ChatCompletion.create(
+            client = _get_openai_client()
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=messages,
                 temperature=0.3,  # Slightly lower temperature for more consistent teaching style
                 max_tokens=500,
             )
-            answer = response["choices"][0]["message"]["content"].strip()
+            answer = response.choices[0].message.content.strip()
 
             # Store the conversation in PostgreSQL
             store_conversation_in_db(db, userId, courseId, query, answer)

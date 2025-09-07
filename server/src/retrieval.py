@@ -1,21 +1,25 @@
-import openai
+from openai import OpenAI
 from sqlalchemy.orm import Session
 from config.config import OPENAI_API_KEY
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 import logging
 
-from .database.connection import get_db_session
+from .database.connection import get_database_session
 from .repositories.material_repository import vector_repository
 
-openai.api_key = OPENAI_API_KEY
 logger = logging.getLogger(__name__)
+
+def _get_openai_client():
+    """Get OpenAI client instance"""
+    return OpenAI(api_key=OPENAI_API_KEY)
 
 
 def get_embedding(text: str, model: str = "text-embedding-3-large") -> List[float]:
     """Generate embedding for a query text"""
-    response = openai.Embedding.create(input=text, model=model)
-    embedding = response["data"][0]["embedding"]
+    client = _get_openai_client()
+    response = client.embeddings.create(input=text, model=model)
+    embedding = response.data[0].embedding
     return embedding
 
 
@@ -29,7 +33,7 @@ def retrieve_from_course(
     # Use provided session or create a new one
     should_close = db is None
     if db is None:
-        db = get_db_session()
+        db = get_database_session()
     
     try:
         # Generate query embedding
@@ -112,7 +116,7 @@ def get_course_embedding_stats(course_id: UUID, db: Session = None) -> Dict[str,
     """Get statistics about embeddings for a course"""
     should_close = db is None
     if db is None:
-        db = get_db_session()
+        db = get_database_session()
     
     try:
         stats = vector_repository.get_embedding_statistics(db, course_id)

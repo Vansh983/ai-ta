@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import DocumentUpload from "@/components/DocumentUpload";
 import DocumentList from "@/components/DocumentList";
 import CourseAboutCards from "@/components/CourseAboutCards";
 import TopKeywords from "@/components/TopKeywords";
 import StudentUsageCharts from "@/components/StudentUsageCharts";
 import { apiService, type Course, type Material } from "@/lib/services/api";
+import { toast } from "sonner";
 
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
@@ -24,7 +24,6 @@ export default function CourseDetailPage() {
   const [documents, setDocuments] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   // Fetch course and documents when component mounts
@@ -42,8 +41,11 @@ export default function CourseDetailPage() {
         ]);
 
         // Check if user owns this course
-        if (courseData.userId !== user.uid) {
-          setError("You don't have permission to view this course.");
+        const hasEmailPermission = courseData.instructor?.email === user.email;
+        const hasUserIdPermission = courseData.userId === user.uid;
+        
+        if (!hasEmailPermission && !hasUserIdPermission) {
+          setError("You don't have permission to access this course.");
           return;
         }
 
@@ -61,32 +63,6 @@ export default function CourseDetailPage() {
     fetchCourseData();
   }, [user, courseId]);
 
-  const handleDocumentUpload = async (document: Material | File) => {
-    if (!user || !courseId) return;
-
-    try {
-      setUploading(true);
-
-      // If it's a File, upload it. If it's already a Document, just add it to the list
-      if (document instanceof File) {
-        const uploadedDocument = await apiService.uploadMaterial(
-          courseId,
-          document
-        );
-        setDocuments((prev) => [uploadedDocument, ...prev]);
-      } else {
-        // It's already a Document, just add it to the list
-        setDocuments((prev) => [document, ...prev]);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to upload document"
-      );
-      console.error("Error uploading document:", err);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleEditCourse = () => {
     router.push(`/instructor/${courseId}/edit`);
@@ -104,9 +80,14 @@ export default function CourseDetailPage() {
     try {
       setDeleting(true);
       await apiService.deleteCourse(courseId);
+      toast.success(`Course "${course.name}" deleted successfully!`);
       router.push("/instructor");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete course");
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete course";
+      setError(errorMessage);
+      toast.error("Failed to delete course", {
+        description: errorMessage
+      });
       console.error("Error deleting course:", err);
     } finally {
       setDeleting(false);
@@ -195,8 +176,12 @@ export default function CourseDetailPage() {
               <span>
                 {course.term} {course.year}
               </span>
-              <span>•</span>
-              <span>{course.faculty}</span>
+              {course.instructor && (
+                <>
+                  <span>•</span>
+                  <span>{course.instructor.name}</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -232,9 +217,9 @@ export default function CourseDetailPage() {
           <CourseAboutCards course={course} documentsCount={documents.length} />
         </div>
 
-        <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
+        <div className='space-y-8'>
           {/* Course Information */}
-          <div className='lg:col-span-2 space-y-8'>
+          <div className='space-y-8'>
             <div className='p-6 rounded-lg border border-gray-700'>
               <h2 className='text-xl font-semibold mb-4 text-white'>
                 Course Description
@@ -264,32 +249,6 @@ export default function CourseDetailPage() {
                 }}
               />
             </div>
-          </div>
-
-          {/* Document Upload Sidebar */}
-          <div className='space-y-8'>
-            <div className='p-6 rounded-lg border border-gray-700'>
-              <h2 className='text-xl font-semibold mb-4 text-white'>
-                Upload Documents
-              </h2>
-              <p className='text-gray-400 text-sm mb-4'>
-                Add course materials, syllabus, lecture notes, assignments, and
-                other relevant documents.
-              </p>
-
-              <DocumentUpload
-                courseId={courseId}
-                userId={user.uid}
-                onUploadComplete={handleDocumentUpload}
-                isPending={false}
-              />
-
-              {uploading && (
-                <div className='mt-4 p-3 bg-blue-900/50 text-blue-200 rounded-md border border-blue-800'>
-                  Uploading document...
-                </div>
-              )}
-            </div>
 
             {/* Course Info Card */}
             <div className='p-6 rounded-lg border border-gray-700'>
@@ -301,10 +260,12 @@ export default function CourseDetailPage() {
                   <span className='text-gray-400'>Code:</span>
                   <span className='text-gray-300'>{course.code}</span>
                 </div>
-                <div className='flex justify-between'>
-                  <span className='text-gray-400'>Faculty:</span>
-                  <span className='text-gray-300'>{course.faculty}</span>
-                </div>
+                {course.instructor && (
+                  <div className='flex justify-between'>
+                    <span className='text-gray-400'>Instructor:</span>
+                    <span className='text-gray-300'>{course.instructor.name}</span>
+                  </div>
+                )}
                 <div className='flex justify-between'>
                   <span className='text-gray-400'>Term:</span>
                   <span className='text-gray-300'>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { apiService, type Course } from "@/lib/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import RequireAuth from "@/components/auth/RequireAuth";
+import { toast } from "sonner";
 // import CourseAnalyticsChart from "@/components/CourseAnalyticsChart";
 
 export default function InstructorDashboard() {
@@ -23,7 +24,7 @@ export default function InstructorDashboard() {
 
       try {
         setLoading(true);
-        const fetchedCourses = await apiService.getCourses();
+        const fetchedCourses = await apiService.getInstructorCourses();
         console.log("Raw courses data in instructor page:", fetchedCourses, "Type:", typeof fetchedCourses);
         
         // Ensure fetchedCourses is an array
@@ -72,8 +73,13 @@ export default function InstructorDashboard() {
       setDeletingCourseId(courseId);
       await apiService.deleteCourse(courseId);
       setCourses(courses.filter((course) => course.id !== courseId));
+      toast.success(`Course "${course.name}" deleted successfully!`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete course");
+      const errorMessage = err instanceof Error ? err.message : "Failed to delete course";
+      setError(errorMessage);
+      toast.error("Failed to delete course", {
+        description: errorMessage
+      });
       console.error("Error deleting course:", err);
     } finally {
       setDeletingCourseId(null);

@@ -49,7 +49,8 @@ class ApiService {
     };
 
     if (user) {
-      headers.Authorization = `Bearer ${user.userId}`;
+      // Send email in x-user-email header for backend authentication
+      headers['x-user-email'] = user.email;
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -77,9 +78,21 @@ class ApiService {
   // Course operations
   async getCourses(): Promise<Course[]> {
     try {
-      const result = await this.request<Course[]>('/courses');
-      // Ensure we always return an array, even if backend returns different structure
-      return Array.isArray(result) ? result : [];
+      const result = await this.request<{courses: any[]}>('/courses');
+      // Extract courses array and map backend fields to frontend format
+      const courses = result.courses || [];
+      return courses.map(course => ({
+        id: course.id,
+        name: course.name,
+        code: course.course_code, // Map course_code to code
+        term: course.semester as "Fall" | "Winter" | "Summer", // Map semester to term
+        year: course.year,
+        description: course.description,
+        createdAt: course.created_at || new Date().toISOString(), // Map created_at to createdAt
+        updatedAt: course.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
+        userId: course.user_id || course.instructor_id, // Map user_id/instructor_id to userId
+        instructor: course.instructor
+      }));
     } catch (error) {
       console.error('Error in getCourses API:', error);
       // Return empty array on error to prevent filter crash
@@ -87,8 +100,45 @@ class ApiService {
     }
   }
 
+  async getInstructorCourses(): Promise<Course[]> {
+    try {
+      const result = await this.request<{courses: any[]}>('/instructor/courses');
+      // Extract courses array and map backend fields to frontend format
+      const courses = result.courses || [];
+      return courses.map(course => ({
+        id: course.id,
+        name: course.name,
+        code: course.course_code, // Map course_code to code
+        term: course.semester as "Fall" | "Winter" | "Summer", // Map semester to term
+        year: course.year,
+        description: course.description,
+        createdAt: course.created_at || new Date().toISOString(), // Map created_at to createdAt
+        updatedAt: course.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
+        userId: course.user_id || course.instructor_id, // Map user_id/instructor_id to userId
+        instructor: course.instructor
+      }));
+    } catch (error) {
+      console.error('Error in getInstructorCourses API:', error);
+      // Return empty array on error to prevent filter crash
+      return [];
+    }
+  }
+
   async getCourse(courseId: string): Promise<Course> {
-    return this.request<Course>(`/courses/${courseId}`);
+    const course = await this.request<any>(`/courses/${courseId}`);
+    // Map backend fields to frontend format
+    return {
+      id: course.id,
+      name: course.name,
+      code: course.course_code, // Map course_code to code
+      term: course.semester as "Fall" | "Winter" | "Summer", // Map semester to term
+      year: course.year,
+      description: course.description,
+      createdAt: course.created_at || new Date().toISOString(), // Map created_at to createdAt
+      updatedAt: course.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
+      userId: course.user_id || course.instructor_id, // Map user_id/instructor_id to userId
+      instructor: course.instructor
+    };
   }
 
   async createCourse(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'userId'>): Promise<Course> {
@@ -111,10 +161,23 @@ class ApiService {
 
     console.log('Creating course with data:', courseData);
 
-    return this.request<Course>('/courses', {
+    const createdCourse = await this.request<any>('/courses', {
       method: 'POST',
       body: JSON.stringify(courseData),
     });
+    // Map backend fields to frontend format
+    return {
+      id: createdCourse.id,
+      name: createdCourse.name,
+      code: createdCourse.course_code, // Map course_code to code
+      term: createdCourse.semester as "Fall" | "Winter" | "Summer", // Map semester to term
+      year: createdCourse.year,
+      description: createdCourse.description,
+      createdAt: createdCourse.created_at || new Date().toISOString(), // Map created_at to createdAt
+      updatedAt: createdCourse.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
+      userId: createdCourse.user_id || createdCourse.instructor_id, // Map user_id/instructor_id to userId
+      instructor: createdCourse.instructor
+    };
   }
 
   async deleteCourse(courseId: string): Promise<void> {
@@ -137,35 +200,69 @@ class ApiService {
     // Don't map faculty since it doesn't exist in backend
     // Don't try to update instructor_email via this endpoint
 
-    return this.request<Course>(`/courses/${courseId}`, {
+    const updatedCourse = await this.request<any>(`/courses/${courseId}`, {
       method: 'PUT',
       body: JSON.stringify(updateData),
     });
+    // Map backend fields to frontend format
+    return {
+      id: updatedCourse.id,
+      name: updatedCourse.name,
+      code: updatedCourse.course_code, // Map course_code to code
+      term: updatedCourse.semester as "Fall" | "Winter" | "Summer", // Map semester to term
+      year: updatedCourse.year,
+      description: updatedCourse.description,
+      createdAt: updatedCourse.created_at || new Date().toISOString(), // Map created_at to createdAt
+      updatedAt: updatedCourse.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
+      userId: updatedCourse.user_id || updatedCourse.instructor_id, // Map user_id/instructor_id to userId
+      instructor: updatedCourse.instructor
+    };
   }
 
   // Material operations
   async getCourseMaterials(courseId: string): Promise<Material[]> {
-    return this.request<Material[]>(`/courses/${courseId}/materials`);
+    try {
+      const result = await this.request<{materials: any[]}>(`/courses/${courseId}/materials`);
+      // Extract materials array and ensure it's always an array
+      const materials = result.materials || [];
+      return materials.map(material => ({
+        id: material.id,
+        filename: material.filename,
+        fileType: material.file_type || material.fileType,
+        uploadedAt: material.uploaded_at || material.uploadedAt || new Date().toISOString(),
+        processingStatus: material.processing_status || material.processingStatus || 'pending'
+      }));
+    } catch (error) {
+      console.error('Error in getCourseMaterials API:', error);
+      // Return empty array on error to prevent crash
+      return [];
+    }
   }
 
   async uploadMaterial(courseId: string, file: File): Promise<Material> {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('courseId', courseId); // Backend expects 'courseId' not 'course_id'
-    
     const user = getCurrentUser();
-    if (user) {
-      formData.append('userId', user.userId); // Add userId for authentication
+    if (!user) {
+      throw new Error('User not authenticated');
     }
 
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('courseId', courseId);
+    formData.append('userId', user.uid || user.userId || 'anonymous');
+
     const headers: Record<string, string> = {};
-    // Note: Don't set Authorization header for multipart/form-data, use form fields
+    // Add user email for backend authentication
+    if (user.email) {
+      headers['x-user-email'] = user.email;
+    }
 
     console.log('Uploading file:', {
       fileName: file.name,
       fileSize: file.size,
+      fileType: file.type,
       courseId,
-      userId: user?.userId
+      userId: user.uid || user.userId,
+      userEmail: user.email
     });
 
     const response = await fetch(`${API_BASE_URL}/upload`, {
@@ -188,7 +285,17 @@ class ApiService {
       throw new Error(`Upload failed: ${errorDetail}`);
     }
 
-    return response.json();
+    const result = await response.json();
+    console.log('Upload response:', result);
+    
+    // Map the backend response to the Material interface
+    return {
+      id: result.id,
+      filename: result.file_name || result.filename,
+      fileType: result.file_type || result.fileType,
+      uploadedAt: result.uploaded_at || result.uploadedAt || new Date().toISOString(),
+      processingStatus: result.processing_status || result.processingStatus || 'pending'
+    };
   }
 
   async deleteMaterial(materialId: string): Promise<void> {
@@ -202,14 +309,15 @@ class ApiService {
     return this.request<{ answer: string }>('/chat', {
       method: 'POST',
       body: JSON.stringify({
-        course_id: courseId,
-        message: message,
+        courseId: courseId,
+        content: message,
       }),
     });
   }
 
   async getChatHistory(courseId: string): Promise<ChatMessage[]> {
-    return this.request<ChatMessage[]>(`/chat-history?course_id=${courseId}`);
+    const response = await this.request<{ history: ChatMessage[] }>(`/chat-history?courseId=${courseId}`);
+    return response.history;
   }
 
   // Analytics

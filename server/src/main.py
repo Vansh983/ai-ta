@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 # Local imports
-from src.ingestion import ingest_course_material, process_unprocessed_materials
+from src.ingestion import (
+    ingest_course_material, 
+    process_unprocessed_materials, 
+    process_course_materials,
+    get_processing_status
+)
 from src.chat import generate_answer, get_conversation_history_from_db
 from src.database.connection import get_database_session, init_db
 from src.repositories.user_repository import user_repository
@@ -39,7 +44,7 @@ app = FastAPI(title="AI Teaching Assistant", version="2.0.0")
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS + ["https://ai-ta.vercel.app"],
+    allow_origins=CORS_ORIGINS + ["https://ai-ta.vercel.app", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -318,12 +323,46 @@ async def list_courses(skip: int = 0, limit: int = 100, db: Session = Depends(ge
         logger.error(f"Error listing courses: {e}")
         raise HTTPException(status_code=500, detail="Failed to list courses")
 
+@app.get("/instructor/courses")
+async def list_instructor_courses(
+    current_user: User = Depends(require_instructor), 
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
+    """List courses for the authenticated instructor"""
+    try:
+        courses = course_repository.get_by_instructor(db, current_user.id)
+        return {
+            "courses": [
+                {
+                    "id": str(course.id),
+                    "course_code": course.course_code,
+                    "name": course.name,
+                    "description": course.description,
+                    "instructor": {
+                        "name": course.instructor.name,
+                        "email": course.instructor.email
+                    } if course.instructor else None,
+                    "semester": course.semester,
+                    "year": course.year,
+                    "created_at": course.created_at,
+                    "updated_at": course.updated_at
+                }
+                for course in courses
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error listing instructor courses for {current_user.id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list instructor courses")
+
 @app.get("/courses/{course_id}")
 async def get_course(course_id: str, db: Session = Depends(get_db)):
     """Get course details"""
     course_uuid = validate_uuid(course_id, "course ID")
     
-    course = course_repository.get_by_id(db, course_uuid)
+    # Use get_course_with_materials to ensure instructor is loaded
+    course = course_repository.get_course_with_materials(db, course_uuid)
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
     
@@ -419,9 +458,17 @@ async def upload_file(
         db.commit()
         
         # Process the document asynchronously (in real app, use task queue)
+        # Try processing immediately, but don't fail upload if processing fails
+        processing_success = False
+        processing_error = None
         try:
-            ingest_course_material(material.id, course_uuid)
+            processing_success = ingest_course_material(material.id, course_uuid)
+            if processing_success:
+                logger.info(f"Successfully processed uploaded file: {file.filename}")
+            else:
+                logger.warning(f"Processing failed for uploaded file: {file.filename}")
         except Exception as e:
+            processing_error = str(e)
             logger.error(f"Failed to process uploaded file: {e}")
             # Don't fail the upload, processing can be retried
         
@@ -429,7 +476,14 @@ async def upload_file(
             "message": "File uploaded successfully",
             "material_id": str(material.id),
             "filename": file.filename,
-            "s3_key": s3_key
+            "s3_key": s3_key,
+            "processing": {
+                "immediate_processing": processing_success,
+                "processing_error": processing_error,
+                "message": "File processed successfully" if processing_success else 
+                          "File uploaded but processing failed - will be retried" if processing_error else
+                          "File uploaded but processing failed"
+            }
         }
         
     except HTTPException:
@@ -559,9 +613,23 @@ async def handle_chat(request: ChatMessage, db: Session = Depends(get_db)):
         
         stats = get_course_embedding_stats(course_uuid, db)
         if stats['total_embeddings'] == 0:
-            return {
-                "answer": "I don't have any course materials to reference yet. Please ask your instructor to upload course materials first."
-            }
+            # Check if there are unprocessed materials that could be processed
+            materials = material_repository.get_course_materials(db, course_uuid)
+            if not materials:
+                return {
+                    "answer": "I don't have any course materials to reference yet. Please ask your instructor to upload course materials first."
+                }
+            else:
+                # Materials exist but not processed - check processing status
+                unprocessed_count = sum(1 for m in materials if not m.is_processed)
+                if unprocessed_count > 0:
+                    return {
+                        "answer": f"I found {len(materials)} course materials, but {unprocessed_count} are still being processed. Please try asking your question again in a few moments, or contact your instructor if this persists."
+                    }
+                else:
+                    return {
+                        "answer": "I found course materials but there was an issue processing them. Please contact your instructor for assistance."
+                    }
         
         answer = generate_answer(
             query=request.content,
@@ -778,6 +846,178 @@ async def process_pending_materials():
     except Exception as e:
         logger.error(f"Error processing materials: {e}")
         raise HTTPException(status_code=500, detail="Failed to process materials")
+
+@app.get("/admin/diagnostics")
+async def run_diagnostics(db: Session = Depends(get_db)):
+    """Diagnostic endpoint to test all components"""
+    diagnostics = {}
+    
+    try:
+        # Test database connection
+        db.execute(text("SELECT 1"))
+        diagnostics["database"] = {"status": "OK", "message": "Database connection working"}
+    except Exception as e:
+        diagnostics["database"] = {"status": "ERROR", "message": f"Database error: {e}"}
+    
+    try:
+        # Test S3 connection
+        s3_status = course_file_service.s3.health_check()
+        diagnostics["s3"] = {"status": "OK" if s3_status else "ERROR", "message": "S3 connection tested"}
+    except Exception as e:
+        diagnostics["s3"] = {"status": "ERROR", "message": f"S3 error: {e}"}
+    
+    try:
+        # Test OpenAI API
+        from openai import OpenAI
+        from config.config import OPENAI_API_KEY
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        test_embedding = openai_client.embeddings.create(
+            input="test", 
+            model="text-embedding-3-large"
+        )
+        diagnostics["openai"] = {"status": "OK", "message": "OpenAI API working", "dimension": len(test_embedding.data[0].embedding)}
+    except Exception as e:
+        diagnostics["openai"] = {"status": "ERROR", "message": f"OpenAI API error: {e}"}
+    
+    try:
+        # Test pgvector
+        result = db.execute(text("SELECT * FROM pg_available_extensions WHERE name = 'vector'"))
+        row = result.fetchone()
+        diagnostics["pgvector"] = {"status": "OK" if row else "ERROR", "message": "pgvector extension check"}
+    except Exception as e:
+        diagnostics["pgvector"] = {"status": "ERROR", "message": f"pgvector error: {e}"}
+    
+    try:
+        # Check for unprocessed materials
+        materials = material_repository.get_unprocessed_materials(db, limit=50)
+        diagnostics["materials"] = {
+            "status": "INFO", 
+            "unprocessed_count": len(materials),
+            "message": f"Found {len(materials)} unprocessed materials"
+        }
+    except Exception as e:
+        diagnostics["materials"] = {"status": "ERROR", "message": f"Materials query error: {e}"}
+    
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "diagnostics": diagnostics,
+        "overall_status": "ERROR" if any(d.get("status") == "ERROR" for d in diagnostics.values()) else "OK"
+    }
+
+@app.post("/admin/process-course/{course_id}")
+async def process_specific_course(
+    course_id: str, 
+    force_reprocess: bool = False,
+    current_user: User = Depends(require_instructor),
+    db: Session = Depends(get_db)
+):
+    """Process all materials for a specific course (instructor only)"""
+    try:
+        course_uuid = validate_uuid(course_id, "course ID")
+        
+        # Verify course exists
+        course = course_repository.get_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Process the course materials
+        result = process_course_materials(course_uuid, force_reprocess=force_reprocess)
+        
+        return {
+            "message": f"Course processing completed for {result['course_name']}",
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing course {course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/process-all-courses")
+async def process_all_courses(
+    force_reprocess: bool = False,
+    current_user: User = Depends(require_instructor)
+):
+    """Process all course materials (instructor only)"""
+    try:
+        with get_database_session() as db:
+            # Get all active courses
+            courses = course_repository.get_active_courses(db, limit=1000)
+            
+            results = []
+            total_processed = 0
+            total_failed = 0
+            
+            for course in courses:
+                try:
+                    result = process_course_materials(course.id, force_reprocess=force_reprocess)
+                    results.append(result)
+                    total_processed += result['processed']
+                    total_failed += result['failed']
+                except Exception as e:
+                    logger.error(f"Failed to process course {course.name}: {e}")
+                    results.append({
+                        'course_id': str(course.id),
+                        'course_name': course.name,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+            
+            return {
+                "message": f"Processed {len(courses)} courses",
+                "summary": {
+                    "total_courses": len(courses),
+                    "total_materials_processed": total_processed,
+                    "total_failed": total_failed
+                },
+                "results": results
+            }
+            
+    except Exception as e:
+        logger.error(f"Error processing all courses: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/processing-status")
+async def get_processing_status_endpoint(current_user: User = Depends(require_instructor)):
+    """Get processing status for all courses (instructor only)"""
+    try:
+        status = get_processing_status()
+        return status
+    except Exception as e:
+        logger.error(f"Error getting processing status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Hook into course creation/update to trigger processing
+@app.post("/courses/{course_id}/process")
+async def trigger_course_processing(
+    course_id: str,
+    force_reprocess: bool = False,
+    current_user: User = Depends(require_student_or_instructor),
+    db: Session = Depends(get_db)
+):
+    """Trigger processing for a course when materials are added/updated"""
+    try:
+        course_uuid = validate_uuid(course_id, "course ID")
+        
+        # Verify course exists
+        course = course_repository.get_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Process course materials
+        result = process_course_materials(course_uuid, force_reprocess=force_reprocess)
+        
+        return {
+            "message": f"Processing triggered for {result['course_name']}",
+            "result": result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering course processing: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
