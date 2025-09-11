@@ -325,6 +325,16 @@ class ApiService {
     return this.request(`/courses/${courseId}/analytics`);
   }
 
+  async getDetailedCourseAnalytics(courseId: string, days: number = 30): Promise<Record<string, unknown>> {
+    return this.request(`/courses/${courseId}/analytics/detailed?days=${days}`);
+  }
+
+  async processCourseAnalytics(courseId: string, days: number = 30): Promise<Record<string, unknown>> {
+    return this.request(`/courses/${courseId}/analytics/process?days=${days}`, {
+      method: 'POST',
+    });
+  }
+
   // User operations
   async createUser(userData: { email: string; displayName?: string; name?: string; role: string }): Promise<Record<string, unknown>> {
     const backendUserData = {
