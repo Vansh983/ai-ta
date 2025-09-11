@@ -18,6 +18,7 @@ from src.ingestion import (
     process_course_materials,
     get_processing_status
 )
+
 from src.chat import generate_answer, get_conversation_history_from_db
 from src.database.connection import get_database_session, init_db
 from src.repositories.user_repository import user_repository
