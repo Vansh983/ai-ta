@@ -5,6 +5,8 @@ from config.config import OPENAI_API_KEY
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 import logging
+import time
+import asyncio
 from datetime import datetime, timezone
 
 from .database.connection import get_database_session
@@ -18,18 +20,47 @@ def _get_openai_client():
     return OpenAI(api_key=OPENAI_API_KEY)
 
 
-def get_embedding(text: str, model: str = "text-embedding-3-large") -> List[float]:
-    """Generate embedding for a text chunk"""
+def get_embedding(text: str, model: str = "text-embedding-3-large", max_retries: int = 3, delay: float = 1.0) -> List[float]:
+    """Generate embedding for a text chunk with retry logic"""
     logger.info(f"Generating embedding for text of length {len(text)} with model {model}")
-    try:
-        client = _get_openai_client()
-        response = client.embeddings.create(input=text, model=model)
-        embedding = response.data[0].embedding
-        logger.info(f"Successfully generated embedding with dimension {len(embedding)}")
-        return embedding
-    except Exception as e:
-        logger.error(f"Failed to generate embedding: {e}")
-        raise
+    
+    for attempt in range(max_retries):
+        try:
+            client = _get_openai_client()
+            response = client.embeddings.create(input=text, model=model)
+            embedding = response.data[0].embedding
+            logger.info(f"Successfully generated embedding with dimension {len(embedding)}")
+            return embedding
+        except Exception as e:
+            logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                sleep_time = delay * (2 ** attempt)  # Exponential backoff
+                logger.info(f"Retrying in {sleep_time} seconds...")
+                time.sleep(sleep_time)
+            else:
+                logger.error(f"Failed to generate embedding after {max_retries} attempts: {e}")
+                raise
+
+def get_embeddings_batch(texts: List[str], model: str = "text-embedding-3-large", max_retries: int = 3) -> List[List[float]]:
+    """Generate embeddings for multiple texts in a single batch request"""
+    logger.info(f"Generating {len(texts)} embeddings in batch with model {model}")
+    
+    for attempt in range(max_retries):
+        try:
+            client = _get_openai_client()
+            response = client.embeddings.create(input=texts, model=model)
+            embeddings = [item.embedding for item in response.data]
+            logger.info(f"Successfully generated {len(embeddings)} embeddings")
+            return embeddings
+        except Exception as e:
+            logger.warning(f"Batch attempt {attempt + 1}/{max_retries} failed: {e}")
+            if attempt < max_retries - 1:
+                sleep_time = 2 * (2 ** attempt)  # Exponential backoff
+                logger.info(f"Retrying batch in {sleep_time} seconds...")
+                time.sleep(sleep_time)
+            else:
+                logger.error(f"Failed to generate batch embeddings after {max_retries} attempts: {e}")
+                raise
 
 
 def process_document_content(
@@ -51,25 +82,62 @@ def process_document_content(
         if not chunks:
             raise ValueError("Document produced no text chunks")
         
-        # Generate embeddings for each chunk
+        # Generate embeddings in batches for better performance and memory management
         chunks_with_embeddings = []
-        logger.info(f"Generating embeddings for {len(chunks)} chunks...")
-        for i, chunk in enumerate(chunks):
-            logger.info(f"Processing chunk {i+1}/{len(chunks)}")
-            try:
-                embedding = get_embedding(chunk)
-                chunks_with_embeddings.append({
-                    'text': chunk,
-                    'embedding': embedding,
-                    'metadata': {
-                        'chunk_length': len(chunk),
-                        'word_count': len(chunk.split())
-                    }
-                })
-                logger.info(f"Successfully processed chunk {i+1}")
-            except Exception as e:
-                logger.warning(f"Failed to generate embedding for chunk {i}: {e}")
+        batch_size = 5  # Process 5 chunks at a time to avoid memory issues
+        logger.info(f"Generating embeddings for {len(chunks)} chunks in batches of {batch_size}...")
+        
+        for i in range(0, len(chunks), batch_size):
+            batch_end = min(i + batch_size, len(chunks))
+            batch_chunks = chunks[i:batch_end]
+            batch_texts = [chunk for chunk in batch_chunks if len(chunk.strip()) > 0]
+            
+            if not batch_texts:
                 continue
+                
+            logger.info(f"Processing batch {i//batch_size + 1}/{(len(chunks) + batch_size - 1)//batch_size} ({len(batch_texts)} chunks)")
+            
+            try:
+                # Use batch embedding generation for efficiency
+                if len(batch_texts) > 1:
+                    embeddings = get_embeddings_batch(batch_texts)
+                else:
+                    embeddings = [get_embedding(batch_texts[0])]
+                
+                # Process each chunk in the batch
+                for j, (chunk, embedding) in enumerate(zip(batch_texts, embeddings)):
+                    chunks_with_embeddings.append({
+                        'text': chunk,
+                        'embedding': embedding,
+                        'metadata': {
+                            'chunk_length': len(chunk),
+                            'word_count': len(chunk.split())
+                        }
+                    })
+                    logger.info(f"Successfully processed chunk {i + j + 1}")
+                
+                # Add a small delay between batches to be respectful to the API
+                if batch_end < len(chunks):
+                    time.sleep(0.5)
+                    
+            except Exception as e:
+                logger.warning(f"Failed to generate embeddings for batch starting at chunk {i+1}: {e}")
+                # Try processing chunks individually as fallback
+                for j, chunk in enumerate(batch_texts):
+                    try:
+                        embedding = get_embedding(chunk)
+                        chunks_with_embeddings.append({
+                            'text': chunk,
+                            'embedding': embedding,
+                            'metadata': {
+                                'chunk_length': len(chunk),
+                                'word_count': len(chunk.split())
+                            }
+                        })
+                        logger.info(f"Successfully processed chunk {i + j + 1} (fallback)")
+                    except Exception as chunk_error:
+                        logger.warning(f"Failed to generate embedding for chunk {i + j + 1}: {chunk_error}")
+                        continue
         
         if not chunks_with_embeddings:
             raise ValueError("Could not generate embeddings for any chunks")

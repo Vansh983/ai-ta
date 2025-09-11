@@ -7,15 +7,33 @@ from typing import BinaryIO, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
+def chunk_text(text: str, chunk_size: int = 300, overlap: int = 100):
+    """
+    Split text into overlapping chunks for better embedding quality.
+    Reduced chunk_size to prevent memory issues and increased overlap for better context.
+    """
     tokens = text.split()
     chunks = []
     start = 0
+    
+    # Don't create chunks if text is too small
+    if len(tokens) <= chunk_size:
+        return [text]
+    
     while start < len(tokens):
         end = min(start + chunk_size, len(tokens))
         chunk = " ".join(tokens[start:end])
-        chunks.append(chunk)
-        start += chunk_size - overlap
+        
+        # Skip empty or very small chunks
+        if len(chunk.strip()) > 10:
+            chunks.append(chunk)
+        
+        # Move forward, but ensure we don't get stuck
+        if start + chunk_size - overlap <= start:
+            start += 1
+        else:
+            start += chunk_size - overlap
+    
     return chunks
 
 def extract_text_from_pdf(pdf_file: BinaryIO) -> str:

@@ -676,8 +676,8 @@ async def handle_chat(request: ChatMessage, db: Session = Depends(get_db)):
                 "answer": "I don't have any course materials to reference yet. Please ask your instructor to upload course materials first."
             }
         
-        # Check processing status
-        unprocessed_count = sum(1 for m in materials if not m.is_processed)
+        # Check processing status - exclude permanently failed materials
+        unprocessed_count = sum(1 for m in materials if not m.is_processed and m.processing_status != 'failed')
         if unprocessed_count > 0:
             return {
                 "answer": f"I found {len(materials)} course materials, but {unprocessed_count} are still being processed. Please try asking your question again in a few moments, or contact your instructor if this persists."
@@ -786,7 +786,7 @@ async def process_course_analytics(
         logger.info(f"Starting analytics processing for course {course_id}")
         
         # Verify course exists
-        course = course_repository.get_course_by_id(db, course_uuid)
+        course = course_repository.get_by_id(db, course_uuid)
         if not course:
             raise HTTPException(status_code=404, detail="Course not found")
         
@@ -819,7 +819,7 @@ async def get_detailed_course_analytics(
     
     try:
         # Verify course exists
-        course = course_repository.get_course_by_id(db, course_uuid)
+        course = course_repository.get_by_id(db, course_uuid)
         if not course:
             raise HTTPException(status_code=404, detail="Course not found")
         

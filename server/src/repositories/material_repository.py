@@ -8,6 +8,11 @@ from sqlalchemy import desc, and_, func
 from uuid import UUID
 import logging
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    Vector = None
+
 from .base_repository import BaseRepository
 from ..database.models import CourseMaterial, VectorEmbedding, Course
 
@@ -205,14 +210,41 @@ class VectorRepository(BaseRepository[VectorEmbedding]):
     ) -> List[VectorEmbedding]:
         """Find similar embeddings using cosine similarity"""
         try:
-            # Using pgvector's cosine similarity operator
-            return (
-                db.query(VectorEmbedding)
-                .filter(VectorEmbedding.course_id == course_id)
-                .order_by(VectorEmbedding.embedding.cosine_distance(query_embedding))
-                .limit(limit)
-                .all()
+            # Using pgvector's cosine distance operator with raw SQL
+            from sqlalchemy import text
+            
+            # Convert list to pgvector format string
+            embedding_str = '[' + ','.join(map(str, query_embedding)) + ']'
+            
+            result = db.execute(
+                text("""
+                    SELECT * FROM vector_embeddings 
+                    WHERE course_id = :course_id 
+                    ORDER BY embedding <=> :query_embedding 
+                    LIMIT :limit
+                """),
+                {
+                    'course_id': str(course_id),
+                    'query_embedding': embedding_str,
+                    'limit': limit
+                }
             )
+            
+            # Convert results back to VectorEmbedding objects
+            embeddings = []
+            for row in result:
+                embedding = VectorEmbedding()
+                embedding.id = row.id
+                embedding.material_id = row.material_id
+                embedding.course_id = row.course_id
+                embedding.chunk_text = row.chunk_text
+                embedding.chunk_index = row.chunk_index
+                embedding.embedding = row.embedding
+                embedding.meta_data = row.meta_data
+                embedding.created_at = row.created_at
+                embeddings.append(embedding)
+            
+            return embeddings
         except SQLAlchemyError as e:
             logger.error(f"Error performing similarity search: {e}")
             raise
