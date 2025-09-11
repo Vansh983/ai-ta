@@ -23,23 +23,6 @@ services:
     networks:
       - app-network
 
-  # LocalStack for AWS S3 emulation
-  localstack:
-    image: localstack/localstack:latest
-    container_name: ai-ta-localstack
-    environment:
-      - SERVICES=s3
-      - DEBUG=1
-      - DATA_DIR=/tmp/localstack/data
-      - DOCKER_HOST=unix:///var/run/docker.sock
-      - AWS_DEFAULT_REGION=ca-central-1
-    ports:
-      - "4566:4566"
-    volumes:
-      - localstack_data:/tmp/localstack
-      - ./docker/init_s3.sh:/etc/localstack/init/ready.d/init_s3.sh
-    networks:
-      - app-network
 
   # Redis for caching (optional but recommended)
   redis:
@@ -61,11 +44,10 @@ services:
     container_name: ai-ta-server
     environment:
       - DATABASE_URL=postgresql://ai_ta_user:ai_ta_password@postgres:5432/ai_ta
-      - AWS_ENDPOINT_URL=http://localstack:4566
       - AWS_ACCESS_KEY_ID=AKIAQ3EGWOCKOKV7IVP4
       - AWS_SECRET_ACCESS_KEY=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
       - AWS_DEFAULT_REGION=ca-central-1
-      - S3_BUCKET_NAME=ai-ta-storage
+      - S3_BUCKET_NAME=ai-ta
       - REDIS_URL=redis://redis:6379/0
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - UPLOAD_FOLDER=/app/uploads
@@ -78,8 +60,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      localstack:
-        condition: service_started
       redis:
         condition: service_started
     restart: unless-stopped
@@ -88,7 +68,6 @@ services:
 
 volumes:
   postgres_data:
-  localstack_data:
   redis_data:
 
 networks:
