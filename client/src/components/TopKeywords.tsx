@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -7,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { apiService } from "@/lib/services/api";
 
 interface Keyword {
   term: string;
@@ -27,50 +29,52 @@ interface TopKeywordsProps {
   courseCode: string;
 }
 
+interface AnalyticsData {
+  topics: {
+    distribution: Record<string, number>;
+    popular_keywords: Array<[string, number]>;
+  };
+}
+
 export default function TopKeywords({ courseCode }: TopKeywordsProps) {
-  // Generate dummy keywords data
-  const keywords: Keyword[] = [
-    { term: "recursion", count: 156, trend: "up", category: "Programming" },
-    {
-      term: "data structures",
-      count: 134,
-      trend: "up",
-      category: "CS Fundamentals",
-    },
-    {
-      term: "algorithms",
-      count: 128,
-      trend: "stable",
-      category: "CS Fundamentals",
-    },
-    { term: "debugging", count: 98, trend: "down", category: "Programming" },
-    { term: "time complexity", count: 87, trend: "up", category: "Algorithms" },
-    {
-      term: "object oriented",
-      count: 76,
-      trend: "stable",
-      category: "Programming",
-    },
-    {
-      term: "binary trees",
-      count: 65,
-      trend: "up",
-      category: "Data Structures",
-    },
-    {
-      term: "sorting algorithms",
-      count: 54,
-      trend: "down",
-      category: "Algorithms",
-    },
-    {
-      term: "linked lists",
-      count: 43,
-      trend: "stable",
-      category: "Data Structures",
-    },
-    { term: "inheritance", count: 38, trend: "up", category: "OOP" },
-  ];
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        // We need to get the course ID from the course code
+        // For now, we'll assume courseCode is actually the course ID
+        const data = await apiService.getDetailedCourseAnalytics(courseCode, 30);
+        
+        if (data.analytics) {
+          setAnalyticsData(data.analytics as AnalyticsData);
+        }
+      } catch (error) {
+        console.error("Error fetching analytics:", error);
+        // Keep null state to show fallback data
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, [courseCode]);
+  // Generate keywords data from analytics or use fallback
+  const keywords: Keyword[] = analyticsData?.topics?.popular_keywords 
+    ? analyticsData.topics.popular_keywords.slice(0, 10).map(([term, count], index) => ({
+        term,
+        count,
+        trend: (["up", "down", "stable"] as const)[index % 3], // Simple rotation for trend
+        category: term.includes("algorithm") ? "Algorithms" 
+                : term.includes("data") ? "Data Structures"
+                : term.includes("debug") ? "Programming"
+                : "General"
+      }))
+    : [
+        { term: "No keywords yet", count: 0, trend: "stable", category: "General" }
+      ];
 
   // Generate dummy student prompts
   const topPrompts: StudentPrompt[] = [
@@ -195,7 +199,9 @@ export default function TopKeywords({ courseCode }: TopKeywordsProps) {
       {/* Top Keywords */}
       <Card className='border-gray-700 bg-[#343541]'>
         <CardHeader>
-          <CardTitle className='text-white'>Top Keywords</CardTitle>
+          <CardTitle className='text-white'>
+            Top Keywords {loading && <span className='text-xs text-gray-400'>(Loading...)</span>}
+          </CardTitle>
           <CardDescription className='text-gray-400'>
             Most frequently mentioned terms by students this week
           </CardDescription>

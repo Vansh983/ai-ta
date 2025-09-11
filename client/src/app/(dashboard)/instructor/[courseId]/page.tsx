@@ -25,6 +25,8 @@ export default function CourseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [processingAnalytics, setProcessingAnalytics] = useState(false);
+  const [analyticsProcessed, setAnalyticsProcessed] = useState(false);
 
   // Fetch course and documents when component mounts
   useEffect(() => {
@@ -96,6 +98,31 @@ export default function CourseDetailPage() {
 
   const handleBackToDashboard = () => {
     router.push("/instructor");
+  };
+
+  const handleProcessAnalytics = async () => {
+    if (!course) return;
+
+    try {
+      setProcessingAnalytics(true);
+      setError("");
+
+      await apiService.processCourseAnalytics(courseId, 30);
+      
+      setAnalyticsProcessed(true);
+      toast.success("Analytics processed successfully!", {
+        description: "Course analytics have been updated with the latest data."
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to process analytics";
+      setError(errorMessage);
+      toast.error("Failed to process analytics", {
+        description: errorMessage
+      });
+      console.error("Error processing analytics:", err);
+    } finally {
+      setProcessingAnalytics(false);
+    }
   };
 
   if (!user) {
@@ -186,6 +213,13 @@ export default function CourseDetailPage() {
           </div>
 
           <div className='flex space-x-3'>
+            <Button
+              onClick={handleProcessAnalytics}
+              disabled={processingAnalytics}
+              className='bg-green-600 hover:bg-green-700 text-white'
+            >
+              {processingAnalytics ? "Processing..." : "Process Analytics"}
+            </Button>
             <Button
               onClick={handleEditCourse}
               className='bg-blue-600 hover:bg-blue-700 text-white'
@@ -294,7 +328,7 @@ export default function CourseDetailPage() {
           <h2 className='text-xl font-semibold text-white mb-6'>
             Student Insights
           </h2>
-          <TopKeywords courseCode={course.code} />
+          <TopKeywords courseCode={courseId} />
         </div>
 
         {/* Student Usage Analytics */}
@@ -302,7 +336,7 @@ export default function CourseDetailPage() {
           <h2 className='text-xl font-semibold text-white mb-6'>
             Usage Analytics
           </h2>
-          <StudentUsageCharts courseCode={course.code} />
+          <StudentUsageCharts courseCode={courseId} />
         </div>
       </div>
     </RequireAuth>

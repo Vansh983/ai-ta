@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -8,24 +9,86 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-import { type Course } from "@/lib/services/api";
+import { type Course, apiService } from "@/lib/services/api";
 
 interface CourseAboutCardsProps {
   course: Course;
   documentsCount?: number;
 }
 
+interface AnalyticsData {
+  overview: {
+    total_queries: number;
+    active_users: number;
+    total_sessions: number;
+    avg_session_duration_minutes: number;
+  };
+  engagement: {
+    total_messages: number;
+    question_ratio: number;
+    questions_asked: number;
+  };
+  growth_metrics: {
+    current_period: {
+      queries: number;
+      users: number;
+    };
+    growth: {
+      queries_percent: number;
+      users_percent: number;
+    };
+  };
+  material_usage: {
+    total_materials: number;
+    usage_rate: number;
+    material_popularity: Record<string, number>;
+  };
+}
+
 export default function CourseAboutCards({ course, documentsCount = 0 }: CourseAboutCardsProps) {
-  // Generate dummy statistics
-  const stats = {
-    totalStudents: Math.floor(Math.random() * 150) + 50, // 50-200 students
-    activeStudents: Math.floor(Math.random() * 50) + 20, // 20-70 active
-    totalQuestions: Math.floor(Math.random() * 500) + 100, // 100-600 questions
-    avgSessionTime: Math.floor(Math.random() * 15) + 5, // 5-20 minutes
-    engagementRate: Math.floor(Math.random() * 40) + 60, // 60-100%
-    lastActivity: "2 hours ago",
-    weeklyGrowth: Math.floor(Math.random() * 20) + 5, // 5-25%
-    documentViews: Math.floor(Math.random() * 1000) + 200, // 200-1200 views
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        const data = await apiService.getDetailedCourseAnalytics(course.id, 30);
+        
+        // Handle the nested structure from the API response
+        if (data.analytics) {
+          setAnalyticsData(data.analytics as AnalyticsData);
+        }
+      } catch (error) {
+        console.error("Error fetching analytics:", error);
+        // Keep null state to show fallback data
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, [course.id]);
+
+  // Use analytics data if available, otherwise fall back to estimates
+  const stats = analyticsData ? {
+    totalStudents: Math.max(analyticsData.overview.active_users * 3, 25), // Estimate total from active
+    activeStudents: analyticsData.overview.active_users,
+    totalQuestions: analyticsData.overview.total_queries,
+    avgSessionTime: Math.round(analyticsData.overview.avg_session_duration_minutes),
+    engagementRate: Math.min(Math.round(analyticsData.engagement.question_ratio * 100), 100),
+    lastActivity: "Recently", // Could be enhanced with actual timestamp
+    weeklyGrowth: Math.round(analyticsData.growth_metrics.growth.queries_percent),
+    documentViews: Math.round(analyticsData.material_usage.usage_rate * 100), // Convert to percentage-like number
+  } : {
+    totalStudents: 0,
+    activeStudents: 0,
+    totalQuestions: 0,
+    avgSessionTime: 0,
+    engagementRate: 0,
+    lastActivity: "No data",
+    weeklyGrowth: 0,
+    documentViews: 0,
   };
 
   const courseDuration = Math.floor(
@@ -39,20 +102,20 @@ export default function CourseAboutCards({ course, documentsCount = 0 }: CourseA
       <Card className='border-gray-700 bg-[#343541]'>
         <CardHeader className='pb-3'>
           <CardTitle className='text-white text-sm font-medium'>
-            Course Overview
+            Course Overview {loading && <span className='text-xs text-gray-400'>(Loading...)</span>}
           </CardTitle>
         </CardHeader>
         <CardContent className='space-y-3'>
           <div className='flex items-center justify-between'>
             <span className='text-gray-400 text-xs'>Students Enrolled</span>
             <span className='text-white font-semibold'>
-              {stats.totalStudents}
+              {loading ? "--" : stats.totalStudents}
             </span>
           </div>
           <div className='flex items-center justify-between'>
             <span className='text-gray-400 text-xs'>Active This Week</span>
             <span className='text-[#19C37D] font-semibold'>
-              {stats.activeStudents}
+              {loading ? "--" : stats.activeStudents}
             </span>
           </div>
           <div className='flex items-center justify-between'>
@@ -74,20 +137,20 @@ export default function CourseAboutCards({ course, documentsCount = 0 }: CourseA
       <Card className='border-gray-700 bg-[#343541]'>
         <CardHeader className='pb-3'>
           <CardTitle className='text-white text-sm font-medium'>
-            Student Engagement
+            Student Engagement {loading && <span className='text-xs text-gray-400'>(Loading...)</span>}
           </CardTitle>
         </CardHeader>
         <CardContent className='space-y-3'>
           <div className='flex items-center justify-between'>
             <span className='text-gray-400 text-xs'>Questions Asked</span>
             <span className='text-white font-semibold'>
-              {stats.totalQuestions.toLocaleString()}
+              {loading ? "--" : stats.totalQuestions.toLocaleString()}
             </span>
           </div>
           <div className='flex items-center justify-between'>
             <span className='text-gray-400 text-xs'>Avg. Session</span>
             <span className='text-purple-400 font-semibold'>
-              {stats.avgSessionTime}m
+              {loading ? "--" : stats.avgSessionTime}m
             </span>
           </div>
           <div className='flex items-center justify-between'>
@@ -99,7 +162,7 @@ export default function CourseAboutCards({ course, documentsCount = 0 }: CourseA
           <div className='flex items-center justify-between'>
             <span className='text-gray-400 text-xs'>Weekly Growth</span>
             <span className='text-blue-400 font-semibold'>
-              +{stats.weeklyGrowth}%
+              {loading ? "--" : `${stats.weeklyGrowth >= 0 ? '+' : ''}${stats.weeklyGrowth}%`}
             </span>
           </div>
         </CardContent>
