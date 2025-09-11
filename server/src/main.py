@@ -25,6 +25,8 @@ from src.repositories.course_repository import course_repository
 from src.repositories.material_repository import material_repository, vector_repository
 from src.repositories.chat_repository import chat_repository
 from src.repositories.traffic_repository import traffic_repository
+from src.repositories.analytics_repository import analytics_repository
+from src.analytics_processor import analytics_processor
 from src.storage.file_operations import course_file_service
 from src.retrieval import retrieve_chunks_text, get_course_embedding_stats
 from src.auth import get_current_user, get_current_user_optional, require_instructor, require_student_or_instructor
@@ -118,9 +120,8 @@ class TrafficTrackingRequest(BaseModel):
     meta_data: Optional[Dict[str, Any]] = None
 
 # Authentication models
-class AuthTokenRequest(BaseModel):
+class AuthEmailRequest(BaseModel):
     email: str
-    token: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: str
@@ -189,8 +190,8 @@ async def health_check(db: Session = Depends(get_db)):
 # Authentication Endpoints
 
 @app.post("/auth/verify", response_model=AuthResponse)
-async def verify_user(request: AuthTokenRequest, db: Session = Depends(get_db)):
-    """Verify user authentication by email or token"""
+async def verify_user(request: AuthEmailRequest, db: Session = Depends(get_db)):
+    """Verify user authentication by email"""
     try:
         user = user_repository.get_by_email(db, request.email)
         if not user:
@@ -409,6 +410,55 @@ async def create_user(request: CreateUserRequest, db: Session = Depends(get_db))
     except Exception as e:
         logger.error(f"Error creating user: {e}")
         raise HTTPException(status_code=500, detail="Failed to create user")
+
+@app.put("/users/{email}/role")
+async def update_user_role(email: str, db: Session = Depends(get_db)):
+    """Update a user's role based on their email address patterns"""
+    try:
+        user = user_repository.update_user_role(db, email)
+        if not user:
+            raise HTTPException(status_code=404, detail=f"User with email {email} not found")
+        
+        db.commit()
+        
+        return {
+            "id": str(user.id),
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "message": "User role updated successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error updating user role for {email}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update user role")
+
+@app.put("/users/fix-roles")
+async def fix_all_user_roles(db: Session = Depends(get_db)):
+    """Fix roles for all users based on their email addresses"""
+    try:
+        users = user_repository.get_active_users(db, skip=0, limit=1000)  # Get all users
+        updated_users = []
+        
+        for user in users:
+            original_role = user.role
+            updated_user = user_repository.update_user_role(db, user.email)
+            if updated_user and updated_user.role != original_role:
+                updated_users.append({
+                    "email": updated_user.email,
+                    "old_role": original_role,
+                    "new_role": updated_user.role
+                })
+        
+        if updated_users:
+            db.commit()
+        
+        return {
+            "message": f"Fixed roles for {len(updated_users)} users",
+            "updated_users": updated_users
+        }
+    except Exception as e:
+        logger.error(f"Error fixing user roles: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fix user roles")
 
 # File Upload Endpoints
 
@@ -722,6 +772,84 @@ async def get_course_analytics(course_id: str, days: int = 30, db: Session = Dep
     except Exception as e:
         logger.error(f"Error getting course analytics: {e}")
         raise HTTPException(status_code=500, detail="Failed to get analytics")
+
+@app.post("/courses/{course_id}/analytics/process")
+async def process_course_analytics(
+    course_id: str, 
+    days: int = 30, 
+    db: Session = Depends(get_db)
+):
+    """Manually trigger analytics processing for a course"""
+    course_uuid = validate_uuid(course_id, "course ID")
+    
+    try:
+        logger.info(f"Starting analytics processing for course {course_id}")
+        
+        # Verify course exists
+        course = course_repository.get_course_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Process analytics
+        analytics_result = analytics_processor.process_course_analytics(db, course_uuid, days)
+        
+        logger.info(f"Completed analytics processing for course {course_id}")
+        
+        return {
+            "message": "Analytics processing completed successfully",
+            "course_id": course_id,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+            "analytics": analytics_result
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing course analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process analytics: {str(e)}")
+
+@app.get("/courses/{course_id}/analytics/detailed")
+async def get_detailed_course_analytics(
+    course_id: str, 
+    days: int = 30,
+    db: Session = Depends(get_db)
+):
+    """Get detailed analytics for a course with processing if needed"""
+    course_uuid = validate_uuid(course_id, "course ID")
+    
+    try:
+        # Verify course exists
+        course = course_repository.get_course_by_id(db, course_uuid)
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        
+        # Get analytics summary from repository
+        summary = analytics_repository.get_course_analytics_summary(db, course_uuid, days)
+        
+        # Get activity trends
+        trends = analytics_repository.get_course_activity_trends(db, course_uuid, days)
+        
+        # Get latest analytics record
+        latest_analytics = analytics_repository.get_latest_course_analytics(db, course_uuid)
+        
+        return {
+            "course_id": course_id,
+            "course_name": course.name,
+            "summary": summary,
+            "trends": trends,
+            "latest_analytics": {
+                "date": latest_analytics.date.isoformat() if latest_analytics else None,
+                "popular_topics": latest_analytics.popular_topics if latest_analytics else {},
+                "material_usage": latest_analytics.material_usage if latest_analytics else {}
+            } if latest_analytics else None,
+            "generated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting detailed course analytics: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get detailed analytics")
 
 # Traffic Tracking Endpoints
 

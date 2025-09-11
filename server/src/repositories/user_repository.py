@@ -67,11 +67,14 @@ class UserRepository(BaseRepository[User]):
             if existing_user:
                 raise ValueError(f"User with email {email} already exists")
 
+            # Auto-assign instructor role based on email
+            final_role = self._determine_role_from_email(email, role)
+
             return self.create(
                 db,
                 email=email,
                 name=name,
-                role=role
+                role=final_role
             )
         except SQLAlchemyError as e:
             logger.error(f"Error creating user: {e}")
@@ -111,6 +114,62 @@ class UserRepository(BaseRepository[User]):
             return False
         except SQLAlchemyError as e:
             logger.error(f"Error reactivating user {user_id}: {e}")
+            raise
+
+    def _determine_role_from_email(self, email: str, requested_role: str = "student") -> str:
+        """
+        Determine the appropriate role based on email address.
+        This auto-assigns instructor role for known instructor emails.
+        """
+        # Define instructor email patterns/domains
+        instructor_domains = [
+            "@university.edu",
+            "@college.edu", 
+            "@school.edu",
+            "@instructor.com"
+        ]
+        
+        # Define specific instructor emails
+        instructor_emails = [
+            "instructor@example.com",
+            "instructor1@example.com",
+            "professor@test.com",
+            "v@test.com",
+            # Add more specific instructor emails here
+        ]
+        
+        email_lower = email.lower()
+        
+        # Check if email is in the instructor emails list
+        if email_lower in instructor_emails:
+            logger.info(f"Auto-assigning instructor role to {email} (found in instructor list)")
+            return "instructor"
+            
+        # Check if email domain matches instructor domains
+        for domain in instructor_domains:
+            if email_lower.endswith(domain.lower()):
+                logger.info(f"Auto-assigning instructor role to {email} (domain match: {domain})")
+                return "instructor"
+        
+        # If no instructor pattern matches, use the requested role
+        return requested_role
+
+    def update_user_role(self, db: Session, email: str) -> Optional[User]:
+        """Update a user's role based on their email address"""
+        try:
+            user = self.get_by_email(db, email)
+            if not user:
+                return None
+                
+            new_role = self._determine_role_from_email(user.email, user.role)
+            if new_role != user.role:
+                updated_user = self.update(db, user, role=new_role)
+                logger.info(f"Updated user {email} role from {user.role} to {new_role}")
+                return updated_user
+            
+            return user
+        except SQLAlchemyError as e:
+            logger.error(f"Error updating user role for {email}: {e}")
             raise
 
 # Global instance

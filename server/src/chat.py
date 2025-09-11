@@ -3,12 +3,14 @@ from config.config import OPENAI_API_KEY
 from typing import List, Dict, Optional, Any
 from uuid import UUID
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from .database.connection import get_database_session
 from .repositories.chat_repository import chat_repository
 from .repositories.user_repository import user_repository
 from .retrieval import retrieve_chunks_text, retrieve_with_context
+from .storage.file_operations import chat_archive_service
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +262,33 @@ Remember to follow the teaching principles in your response.""",
 
             # Store the conversation in PostgreSQL
             store_conversation_in_db(db, userId, courseId, query, answer)
+            
+            # Archive chat to S3 for analytics processing (async, non-blocking)
+            try:
+                if userId != "anonymous":
+                    # Get the active session for this user/course
+                    user_uuid = UUID(userId)
+                    course_uuid = UUID(courseId)
+                    session = chat_repository.get_or_create_active_session(db, user_uuid, course_uuid)
+                    
+                    # Prepare chat data for archiving
+                    chat_data = {
+                        'session_id': str(session.id),
+                        'user_id': userId,
+                        'course_id': courseId,
+                        'query': query,
+                        'answer': answer,
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                        'context_chunks': context_chunks[:3] if context_chunks else [],  # Sample for analysis
+                        'materials_used': materials_used[:3] if materials_used else []
+                    }
+                    
+                    # Archive to S3 (fire and forget - don't block response)
+                    chat_archive_service.archive_chat_session(session.id, chat_data)
+                    
+            except Exception as archive_error:
+                # Don't fail the response if archiving fails
+                logger.warning(f"Failed to archive chat to S3: {archive_error}")
 
             return answer
 

@@ -228,6 +228,9 @@ class CourseAnalytics(Base):
     popular_topics = Column(JSON, default={})
     avg_session_duration = Column(Interval)
     material_usage = Column(JSON, default={})
+    peak_usage_hours = Column(JSON, default={})
+    engagement_metrics = Column(JSON, default={})
+    activity_patterns = Column(JSON, default={})
     
     __table_args__ = (UniqueConstraint('course_id', 'date', name='unique_course_date'),)
     
