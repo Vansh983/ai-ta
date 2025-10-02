@@ -105,8 +105,8 @@ If needed, you can switch back to LocalStack by:
 2. Updating `.env` to use LocalStack endpoint:
    ```env
    AWS_ENDPOINT_URL=http://localhost:4566
-   AWS_ACCESS_KEY_ID=AKIAQ3EGWOCKOKV7IVP4
-   AWS_SECRET_ACCESS_KEY=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
+   AWS_ACCESS_KEY_ID=localstack_access_key
+   AWS_SECRET_ACCESS_KEY=localstack_secret_key
    S3_BUCKET_NAME=ai-ta-storage
    ```
 
