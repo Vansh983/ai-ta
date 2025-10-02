@@ -1,51 +1,101 @@
 version: "3.8"
 
 services:
+  # PostgreSQL Database with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-ta-postgres
+    environment:
+      - POSTGRES_DB=ai_ta
+      - POSTGRES_USER=ai_ta_user
+      - POSTGRES_PASSWORD=ai_ta_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./server/docker/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_ta_user -d ai_ta"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  # LocalStack removed - using real AWS S3
+
+  # Redis for caching (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: ai-ta-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app-network
+
+  # Backend API Server
+  server:
+    build:
+      context: ./server
+      dockerfile: docker/Dockerfile
+    container_name: ai-ta-server
+    environment:
+      - DATABASE_URL=postgresql://ai_ta_user:ai_ta_password@postgres:5432/ai_ta
+      # Use real AWS S3 - configure credentials in .env file
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ca-central-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - REDIS_URL=redis://redis:6379/0
+      - CORS_ORIGINS=http://localhost:3000,http://client:3000
+      - UPLOAD_FOLDER=/app/uploads
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    env_file:
+      - ./server/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server/uploads:/app/uploads
+      - ./server/src:/app/src # For development hot reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  # Frontend Client
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL
-        - NEXT_PUBLIC_FIREBASE_API_KEY
-        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-        - NEXT_PUBLIC_FIREBASE_PROJECT_ID
-        - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-        - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-        - NEXT_PUBLIC_FIREBASE_APP_ID
-        - NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    container_name: ai-ta-client
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
     env_file:
-      - ./client/.env
+      - ./client/.env.local
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-      - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
-      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
-      - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
-      - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
-      - NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}
-      - NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID}
+    volumes:
+      - ./client/src:/app/src # For development hot reload
+      - ./client/public:/app/public
     depends_on:
       - server
+    restart: unless-stopped
     networks:
       - app-network
 
-  server:
-    build:
-      context: ./server
-      dockerfile: docker/Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - CORS_ORIGINS=http://localhost:3000,http://client:3000
-    volumes:
-      - ./server:/app
-      - /app/venv
-      - /app/__pycache__
-    networks:
-      - app-network
+volumes:
+  postgres_data:
+  redis_data:
 
 networks:
   app-network:

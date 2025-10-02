@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { signUp } from '@/lib/firebase/auth.utils';
-import { createUserDocument, UserRole } from '@/lib/firebase/user.utils';
+import { apiService } from '@/lib/services/api';
 import Link from 'next/link';
+
+type UserRole = 'student' | 'instructor' | 'admin';
 
 interface SignUpProps {
     onSignUp?: () => void;
@@ -27,8 +28,12 @@ export default function SignUp({ onSignUp }: SignUpProps) {
         setLoading(true);
 
         try {
-            const user = await signUp(email, password);
-            await createUserDocument(user, role);
+            // For now, just create a user record via API
+            await apiService.createUser({
+                email,
+                displayName: email.split('@')[0],
+                role
+            });
             onSignUp?.();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to sign up');

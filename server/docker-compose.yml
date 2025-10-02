@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-ta-postgres
+    environment:
+      - POSTGRES_DB=ai_ta
+      - POSTGRES_USER=ai_ta_user
+      - POSTGRES_PASSWORD=ai_ta_password
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_ta_user -d ai_ta"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+
+  # Redis for caching (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: ai-ta-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - app-network
+
+  # Main application server
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: ai-ta-server
+    environment:
+      - DATABASE_URL=postgresql://ai_ta_user:ai_ta_password@postgres:5432/ai_ta
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ca-central-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - UPLOAD_FOLDER=/app/uploads
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge

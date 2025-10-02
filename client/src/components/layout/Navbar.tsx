@@ -5,11 +5,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Box, Container, Flex, Text, DropdownMenu, Avatar } from "@radix-ui/themes";
 
 export default function Navbar() {
-    const { user, userRole, signOut, loading } = useAuth();
+    const { user, signOut, loading } = useAuth();
 
     const getDashboardLink = () => {
-        if (userRole === 'instructor') return '/instructor';
-        if (userRole === 'student') return '/student';
+        if (user?.role === 'instructor') return '/instructor';
+        if (user?.role === 'student') return '/student';
         return '/';
     };
 
@@ -45,7 +45,6 @@ export default function Navbar() {
                                                             <button className="rounded-full hover:opacity-80 transition-opacity">
                                                                 <Avatar
                                                                     size="3"
-                                                                    src={user.photoURL || undefined}
                                                                     fallback={user.email?.[0].toUpperCase() || 'U'}
                                                                     radius="full"
                                                                     className="cursor-pointer"
@@ -59,7 +58,7 @@ export default function Navbar() {
                                                                     {user.email}
                                                                 </Text>
                                                                 <Text as="div" size="1" color="gray">
-                                                                    Role: {userRole}
+                                                                    Role: {user?.role}
                                                                 </Text>
                                                             </DropdownMenu.Item>
                                                             <DropdownMenu.Separator />

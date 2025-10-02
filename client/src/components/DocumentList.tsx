@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getCourseDocuments, deleteDocument, type Document } from '@/lib/firebase/firebase.utils';
+import { apiService, type Material } from '@/lib/services/api';
 
 interface DocumentListProps {
     courseId: string;
@@ -8,14 +8,14 @@ interface DocumentListProps {
 }
 
 export default function DocumentList({ courseId, userId, onDocumentDeleted }: DocumentListProps) {
-    const [documents, setDocuments] = useState<Document[]>([]);
+    const [documents, setDocuments] = useState<Material[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const loadDocuments = useCallback(async () => {
         try {
-            const docs = await getCourseDocuments(courseId, userId);
+            const docs = await apiService.getCourseMaterials(courseId);
             setDocuments(docs);
             setError('');
         } catch (err) {
@@ -23,7 +23,7 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
         } finally {
             setLoading(false);
         }
-    }, [courseId, userId]);
+    }, [courseId]);
 
     useEffect(() => {
         loadDocuments();
@@ -36,7 +36,7 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
 
         setDeletingId(documentId);
         try {
-            await deleteDocument(documentId, courseId, userId);
+            await apiService.deleteMaterial(documentId);
             await loadDocuments();
             onDocumentDeleted?.();
         } catch (err) {
@@ -46,13 +46,6 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
         }
     };
 
-    const formatFileSize = (bytes: number) => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
 
     if (loading) {
         return <div className="text-center py-4">Loading documents...</div>;
@@ -83,26 +76,22 @@ export default function DocumentList({ courseId, userId, onDocumentDeleted }: Do
                 >
                     <div className="flex-1 min-w-0 mr-4">
                         <h3 className="text-sm font-medium text-gray-900 truncate">
-                            {doc.name}
+                            {doc.filename}
                         </h3>
                         <div className="mt-1 flex items-center text-xs text-gray-500">
-                            <span className="mr-2">{formatFileSize(doc.size)}</span>
+                            <span className="mr-2">{doc.fileType}</span>
                             <span>•</span>
                             <span className="ml-2">
-                                {new Date(doc.createdAt).toLocaleDateString()}
+                                {new Date(doc.uploadedAt).toLocaleDateString()}
+                            </span>
+                            <span>•</span>
+                            <span className="ml-2">
+                                {doc.processingStatus}
                             </span>
                         </div>
                     </div>
 
                     <div className="flex items-center space-x-2">
-                        <a
-                            href={doc.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                            Download
-                        </a>
                         <button
                             onClick={() => handleDelete(doc.id)}
                             disabled={deletingId === doc.id}
