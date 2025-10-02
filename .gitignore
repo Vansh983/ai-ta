@@ -72,3 +72,7 @@ client/yarn.lock
 *.csr.pem
 *.csr.pem.key
 *.csr.pem.crt
+
+.claude
+
+CLAUDE.md
