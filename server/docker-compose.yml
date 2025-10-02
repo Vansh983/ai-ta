@@ -44,10 +44,10 @@ services:
     container_name: ai-ta-server
     environment:
       - DATABASE_URL=postgresql://ai_ta_user:ai_ta_password@postgres:5432/ai_ta
-      - AWS_ACCESS_KEY_ID=AKIAQ3EGWOCKOKV7IVP4
-      - AWS_SECRET_ACCESS_KEY=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
-      - AWS_DEFAULT_REGION=ca-central-1
-      - S3_BUCKET_NAME=ai-ta
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-ca-central-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
       - REDIS_URL=redis://redis:6379/0
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - UPLOAD_FOLDER=/app/uploads
