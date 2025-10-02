@@ -1,6 +1,8 @@
 # AI Teaching Assistant
 
-Currently in development, just trying to build a good solution for fixing some educational problems in early university courses.
+[![Watch the video](thumbnail-image-url)](https://www.loom.com/share/09c47d2b73724d50bdaafc21613a6170?sid=27802f61-86ae-43d9-a4b7-72f2ab05368f)
+
+Trying to build a good solution for fixing some educational problems in early university courses.
 
 Being developed by Vansh Sood
 
