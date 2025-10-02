@@ -1,6 +1,7 @@
 # AI Teaching Assistant
 
-[![Watch the video](thumbnail-image-url)](https://www.loom.com/share/09c47d2b73724d50bdaafc21613a6170?sid=27802f61-86ae-43d9-a4b7-72f2ab05368f)
+[![Watch the video](test)](https://www.loom.com/share/09c47d2b73724d50bdaafc21613a6170?sid=27802f61-86ae-43d9-a4b7-72f2ab05368f)
+[![Watch the video](https://github.com/user-attachments/assets/9f7671a2-be4c-4fae-bae6-f60039c55c17)](https://www.loom.com/share/09c47d2b73724d50bdaafc21613a6170?sid=27802f61-86ae-43d9-a4b7-72f2ab05368f)
 
 Trying to build a good solution for fixing some educational problems in early university courses.
 
