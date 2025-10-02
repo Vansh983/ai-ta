@@ -28,7 +28,6 @@ export default function CourseCreation({ userId, onCourseCreated }: CourseCreati
             const course = await apiService.createCourse({
                 name,
                 code,
-                faculty,
                 term,
                 year,
                 description,

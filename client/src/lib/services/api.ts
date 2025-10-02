@@ -2,11 +2,67 @@ import { getCurrentUser } from '../auth/auth.utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+type CourseTerm = 'Fall' | 'Winter' | 'Summer';
+type MaterialProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+const isCourseTerm = (value: unknown): value is CourseTerm =>
+  value === 'Fall' || value === 'Winter' || value === 'Summer';
+
+const mapSemesterToTerm = (semester?: string): CourseTerm =>
+  isCourseTerm(semester) ? semester : 'Fall';
+
+interface BackendInstructor {
+  name?: string;
+  email?: string;
+}
+
+interface BackendCourse {
+  id: string;
+  name: string;
+  course_code: string;
+  semester?: CourseTerm;
+  year?: number;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+  user_id?: string;
+  instructor_id?: string;
+  instructor?: BackendInstructor;
+}
+
+interface CoursesResponse {
+  courses?: BackendCourse[];
+}
+
+interface BackendMaterial {
+  id: string;
+  filename?: string;
+  file_name?: string;
+  file_type?: string;
+  fileType?: string;
+  uploaded_at?: string;
+  uploadedAt?: string;
+  processing_status?: MaterialProcessingStatus;
+  processingStatus?: MaterialProcessingStatus;
+}
+
+interface MaterialsResponse {
+  materials?: BackendMaterial[];
+}
+
+type CourseUpdatePayload = {
+  name?: string;
+  course_code?: string;
+  description?: string;
+  semester?: CourseTerm;
+  year?: number;
+};
+
 export interface Course {
   id: string;
   name: string;
   code: string; // Maps to course_code in backend
-  term: "Fall" | "Winter" | "Summer"; // Maps to semester in backend
+  term: CourseTerm; // Maps to semester in backend
   year: number;
   description: string;
   createdAt: string;
@@ -15,8 +71,8 @@ export interface Course {
   // Note: faculty field removed - not in backend schema
   // Backend may also include:
   instructor?: {
-    name: string;
-    email: string;
+    name?: string;
+    email?: string;
   };
 }
 
@@ -25,7 +81,7 @@ export interface Material {
   filename: string;
   fileType: string;
   uploadedAt: string;
-  processingStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  processingStatus: MaterialProcessingStatus;
 }
 
 export interface ChatMessage {
@@ -38,6 +94,36 @@ export interface ChatMessage {
 }
 
 class ApiService {
+  private toCourse(course: BackendCourse): Course {
+    return {
+      id: course.id,
+      name: course.name,
+      code: course.course_code,
+      term: mapSemesterToTerm(course.semester),
+      year: course.year ?? new Date().getFullYear(),
+      description: course.description ?? '',
+      createdAt: course.created_at ?? new Date().toISOString(),
+      updatedAt: course.updated_at ?? new Date().toISOString(),
+      userId: course.user_id ?? course.instructor_id ?? '',
+      instructor: course.instructor
+        ? {
+            name: course.instructor.name,
+            email: course.instructor.email,
+          }
+        : undefined,
+    };
+  }
+
+  private toMaterial(material: BackendMaterial): Material {
+    return {
+      id: material.id,
+      filename: material.filename ?? material.file_name ?? 'unknown',
+      fileType: material.file_type ?? material.fileType ?? 'application/octet-stream',
+      uploadedAt: material.uploaded_at ?? material.uploadedAt ?? new Date().toISOString(),
+      processingStatus: material.processing_status ?? material.processingStatus ?? 'pending',
+    };
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -72,27 +158,16 @@ class ApiService {
       throw new Error(errorMessage);
     }
 
-    return response.json();
+    return response.json() as Promise<T>;
   }
 
   // Course operations
   async getCourses(): Promise<Course[]> {
     try {
-      const result = await this.request<{courses: any[]}>('/courses');
+      const result = await this.request<CoursesResponse>('/courses');
       // Extract courses array and map backend fields to frontend format
-      const courses = result.courses || [];
-      return courses.map(course => ({
-        id: course.id,
-        name: course.name,
-        code: course.course_code, // Map course_code to code
-        term: course.semester as "Fall" | "Winter" | "Summer", // Map semester to term
-        year: course.year,
-        description: course.description,
-        createdAt: course.created_at || new Date().toISOString(), // Map created_at to createdAt
-        updatedAt: course.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
-        userId: course.user_id || course.instructor_id, // Map user_id/instructor_id to userId
-        instructor: course.instructor
-      }));
+      const courses = result.courses ?? [];
+      return courses.map(course => this.toCourse(course));
     } catch (error) {
       console.error('Error in getCourses API:', error);
       // Return empty array on error to prevent filter crash
@@ -102,21 +177,10 @@ class ApiService {
 
   async getInstructorCourses(): Promise<Course[]> {
     try {
-      const result = await this.request<{courses: any[]}>('/instructor/courses');
+      const result = await this.request<CoursesResponse>('/instructor/courses');
       // Extract courses array and map backend fields to frontend format
-      const courses = result.courses || [];
-      return courses.map(course => ({
-        id: course.id,
-        name: course.name,
-        code: course.course_code, // Map course_code to code
-        term: course.semester as "Fall" | "Winter" | "Summer", // Map semester to term
-        year: course.year,
-        description: course.description,
-        createdAt: course.created_at || new Date().toISOString(), // Map created_at to createdAt
-        updatedAt: course.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
-        userId: course.user_id || course.instructor_id, // Map user_id/instructor_id to userId
-        instructor: course.instructor
-      }));
+      const courses = result.courses ?? [];
+      return courses.map(course => this.toCourse(course));
     } catch (error) {
       console.error('Error in getInstructorCourses API:', error);
       // Return empty array on error to prevent filter crash
@@ -125,20 +189,8 @@ class ApiService {
   }
 
   async getCourse(courseId: string): Promise<Course> {
-    const course = await this.request<any>(`/courses/${courseId}`);
-    // Map backend fields to frontend format
-    return {
-      id: course.id,
-      name: course.name,
-      code: course.course_code, // Map course_code to code
-      term: course.semester as "Fall" | "Winter" | "Summer", // Map semester to term
-      year: course.year,
-      description: course.description,
-      createdAt: course.created_at || new Date().toISOString(), // Map created_at to createdAt
-      updatedAt: course.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
-      userId: course.user_id || course.instructor_id, // Map user_id/instructor_id to userId
-      instructor: course.instructor
-    };
+    const course = await this.request<BackendCourse>(`/courses/${courseId}`);
+    return this.toCourse(course);
   }
 
   async createCourse(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'userId'>): Promise<Course> {
@@ -161,23 +213,11 @@ class ApiService {
 
     console.log('Creating course with data:', courseData);
 
-    const createdCourse = await this.request<any>('/courses', {
+    const createdCourse = await this.request<BackendCourse>('/courses', {
       method: 'POST',
       body: JSON.stringify(courseData),
     });
-    // Map backend fields to frontend format
-    return {
-      id: createdCourse.id,
-      name: createdCourse.name,
-      code: createdCourse.course_code, // Map course_code to code
-      term: createdCourse.semester as "Fall" | "Winter" | "Summer", // Map semester to term
-      year: createdCourse.year,
-      description: createdCourse.description,
-      createdAt: createdCourse.created_at || new Date().toISOString(), // Map created_at to createdAt
-      updatedAt: createdCourse.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
-      userId: createdCourse.user_id || createdCourse.instructor_id, // Map user_id/instructor_id to userId
-      instructor: createdCourse.instructor
-    };
+    return this.toCourse(createdCourse);
   }
 
   async deleteCourse(courseId: string): Promise<void> {
@@ -188,7 +228,7 @@ class ApiService {
 
   async updateCourse(courseId: string, updates: Partial<Course>): Promise<Course> {
     // Map frontend fields to backend expected fields
-    const updateData: any = {};
+    const updateData: CourseUpdatePayload = {};
     
     // Map each field that might be updated
     if (updates.name !== undefined) updateData.name = updates.name;
@@ -200,38 +240,20 @@ class ApiService {
     // Don't map faculty since it doesn't exist in backend
     // Don't try to update instructor_email via this endpoint
 
-    const updatedCourse = await this.request<any>(`/courses/${courseId}`, {
+    const updatedCourse = await this.request<BackendCourse>(`/courses/${courseId}`, {
       method: 'PUT',
       body: JSON.stringify(updateData),
     });
-    // Map backend fields to frontend format
-    return {
-      id: updatedCourse.id,
-      name: updatedCourse.name,
-      code: updatedCourse.course_code, // Map course_code to code
-      term: updatedCourse.semester as "Fall" | "Winter" | "Summer", // Map semester to term
-      year: updatedCourse.year,
-      description: updatedCourse.description,
-      createdAt: updatedCourse.created_at || new Date().toISOString(), // Map created_at to createdAt
-      updatedAt: updatedCourse.updated_at || new Date().toISOString(), // Map updated_at to updatedAt
-      userId: updatedCourse.user_id || updatedCourse.instructor_id, // Map user_id/instructor_id to userId
-      instructor: updatedCourse.instructor
-    };
+    return this.toCourse(updatedCourse);
   }
 
   // Material operations
   async getCourseMaterials(courseId: string): Promise<Material[]> {
     try {
-      const result = await this.request<{materials: any[]}>(`/courses/${courseId}/materials`);
+      const result = await this.request<MaterialsResponse>(`/courses/${courseId}/materials`);
       // Extract materials array and ensure it's always an array
-      const materials = result.materials || [];
-      return materials.map(material => ({
-        id: material.id,
-        filename: material.filename,
-        fileType: material.file_type || material.fileType,
-        uploadedAt: material.uploaded_at || material.uploadedAt || new Date().toISOString(),
-        processingStatus: material.processing_status || material.processingStatus || 'pending'
-      }));
+      const materials = result.materials ?? [];
+      return materials.map(material => this.toMaterial(material));
     } catch (error) {
       console.error('Error in getCourseMaterials API:', error);
       // Return empty array on error to prevent crash
@@ -285,17 +307,11 @@ class ApiService {
       throw new Error(`Upload failed: ${errorDetail}`);
     }
 
-    const result = await response.json();
+    const result = await response.json() as BackendMaterial;
     console.log('Upload response:', result);
     
     // Map the backend response to the Material interface
-    return {
-      id: result.id,
-      filename: result.file_name || result.filename,
-      fileType: result.file_type || result.fileType,
-      uploadedAt: result.uploaded_at || result.uploadedAt || new Date().toISOString(),
-      processingStatus: result.processing_status || result.processingStatus || 'pending'
-    };
+    return this.toMaterial(result);
   }
 
   async deleteMaterial(materialId: string): Promise<void> {
